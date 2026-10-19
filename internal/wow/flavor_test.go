@@ -8,12 +8,17 @@ import (
 	"testing"
 )
 
-func TestFlavorsFindsFoldersWithWTF(t *testing.T) {
+func TestFlavorsFindsEveryUnderscoreFolder(t *testing.T) {
 	root := t.TempDir()
-	for _, p := range []string{"_retail_/WTF", "_classic_era_/WTF", "_ptr_", "Data", "__/WTF"} {
+	// _ptr_ has never been launched, so it has no WTF folder yet; it's still a flavor that can
+	// receive settings from another PC.
+	for _, p := range []string{"_retail_/WTF", "_classic_era_/WTF", "_ptr_", "Data", "__/WTF", ".battle.net"} {
 		if err := os.MkdirAll(filepath.Join(root, filepath.FromSlash(p)), 0o755); err != nil {
 			t.Fatal(err)
 		}
+	}
+	if err := os.WriteFile(filepath.Join(root, "_notadir_"), nil, 0o644); err != nil {
+		t.Fatal(err)
 	}
 	got, err := Flavors(root)
 	if err != nil {
@@ -21,6 +26,7 @@ func TestFlavorsFindsFoldersWithWTF(t *testing.T) {
 	}
 	want := []Flavor{
 		{Name: "classic_era", Dir: filepath.Join(root, "_classic_era_")},
+		{Name: "ptr", Dir: filepath.Join(root, "_ptr_")},
 		{Name: "retail", Dir: filepath.Join(root, "_retail_")},
 	}
 	if !reflect.DeepEqual(got, want) {

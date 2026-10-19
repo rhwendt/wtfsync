@@ -186,3 +186,27 @@ func TestScenarioNewAddonOnOnePCIsFlaggedOnTheOther(t *testing.T) {
 		t.Fatalf("still flagged after install:\n%s", out)
 	}
 }
+
+func TestScenarioFlavorNeverLaunchedHereReceivesSettings(t *testing.T) {
+	nj, ny := newPair(t)
+	era := "Account/123#1/SavedVariables/Questie.lua"
+	for _, p := range []*pc{nj, ny} {
+		if err := os.MkdirAll(filepath.Join(p.wowDir, "_classic_era_"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.MkdirAll(filepath.Join(nj.wowDir, "_classic_era_", "WTF", "Account", "123#1", "SavedVariables"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(nj.wowDir, "_classic_era_", "WTF", filepath.FromSlash(era)), []byte("q"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	nj.initCmd()
+	if code, out := ny.link(""); code != 0 { // NY's _classic_era_ has no WTF folder yet
+		t.Fatalf("link: exit %d\n%s", code, out)
+	}
+	b, err := os.ReadFile(filepath.Join(ny.wowDir, "_classic_era_", "WTF", filepath.FromSlash(era)))
+	if err != nil || string(b) != "q" {
+		t.Fatalf("NY classic_era: %q, %v", b, err)
+	}
+}
