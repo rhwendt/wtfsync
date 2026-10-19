@@ -2,6 +2,7 @@ package collect
 
 import (
 	"bufio"
+	"cmp"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -111,18 +112,123 @@ func parseTOC(p string) (Addon, error) {
 	return a, sc.Err()
 }
 
-// Missing returns the folders in other that aren't in installed (compared case-insensitively), sorted.
-func Missing(installed, other []Addon) []string {
+// MissingAddon is an addon another PC has that this one doesn't: its folders that are missing here
+// and, when its .toc names a project, where to download it.
+type MissingAddon struct {
+	Name    string   // the addon's main folder
+	Folders []string // sorted
+	URL     string   // "" when no project id is known
+}
+
+// Missing returns the addons in other whose folders aren't in installed (compared
+// case-insensitively), sorted by name. Folders that share a project id, or are named after another
+// missing folder (ElvUI_Options next to ElvUI), are grouped as one addon.
+func Missing(installed, other []Addon) []MissingAddon {
 	have := map[string]bool{}
 	for _, a := range installed {
 		have[strings.ToLower(a.Folder)] = true
 	}
-	var out []string
+	var missing []Addon
 	for _, a := range other {
 		if !have[strings.ToLower(a.Folder)] {
-			out = append(out, a.Folder)
+			missing = append(missing, a)
 		}
 	}
-	sort.Strings(out)
+	// Shortest names first, so a main folder exists before the folders named after it.
+	sort.Slice(missing, func(i, j int) bool {
+		a, b := missing[i].Folder, missing[j].Folder
+		if len(a) != len(b) {
+			return len(a) < len(b)
+		}
+		return a < b
+	})
+	var groups []*MissingAddon
+	byID := map[string]*MissingAddon{}
+	for _, a := range missing {
+		g := byID[projectKey(a)]
+		if g == nil || projectKey(a) == "" {
+			g = namedAfter(groups, a.Folder)
+		}
+		if g == nil {
+			g = &MissingAddon{Name: a.Folder}
+			groups = append(groups, g)
+		}
+		g.Folders = append(g.Folders, a.Folder)
+		if k := projectKey(a); k != "" && byID[k] == nil {
+			byID[k] = g
+		}
+	}
+	out := make([]MissingAddon, 0, len(groups))
+	for _, g := range groups {
+		sort.Strings(g.Folders)
+		g.URL = groupURL(g.Folders, missing)
+		out = append(out, *g)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	if len(out) == 0 {
+		return nil
+	}
 	return out
+}
+
+// projectKey identifies an addon's project from the first id its .toc gives; "" if none.
+func projectKey(a Addon) string {
+	switch {
+	case a.Curse != "":
+		return "curse:" + a.Curse
+	case a.Wago != "":
+		return "wago:" + a.Wago
+	case a.WoWI != "":
+		return "wowi:" + a.WoWI
+	}
+	return ""
+}
+
+// namedAfter finds the group whose main folder this folder is named after (ElvUI for ElvUI_Options).
+func namedAfter(groups []*MissingAddon, folder string) *MissingAddon {
+	f := strings.ToLower(folder)
+	for _, g := range groups {
+		n := strings.ToLower(g.Name)
+		if strings.HasPrefix(f, n+"_") || strings.HasPrefix(f, n+"-") {
+			return g
+		}
+	}
+	return nil
+}
+
+// groupURL links the group's project, preferring CurseForge, then Wago, then WoWInterface.
+func groupURL(folders []string, addons []Addon) string {
+	in := map[string]bool{}
+	for _, f := range folders {
+		in[f] = true
+	}
+	var curse, wago, wowi string
+	for _, a := range addons {
+		if !in[a.Folder] {
+			continue
+		}
+		if curse == "" && isID(a.Curse) {
+			curse = "https://www.curseforge.com/projects/" + a.Curse
+		}
+		if wago == "" && isID(a.Wago) {
+			wago = "https://addons.wago.io/addons/" + a.Wago
+		}
+		if wowi == "" && isID(a.WoWI) {
+			wowi = "https://www.wowinterface.com/downloads/info" + a.WoWI
+		}
+	}
+	return cmp.Or(curse, wago, wowi)
+}
+
+// isID accepts plain alphanumeric ids, so text from a .toc can't turn into an odd link.
+func isID(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, r := range s {
+		if !('0' <= r && r <= '9' || 'a' <= r && r <= 'z' || 'A' <= r && r <= 'Z') {
+			return false
+		}
+	}
+	return true
 }

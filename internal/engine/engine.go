@@ -66,11 +66,12 @@ type Report struct {
 	UpToDate bool // pull: already had the newest snapshot; push: nothing changed since the base
 
 	// Set when a snapshot was merged in (by pull, or by push when this PC was behind).
-	Merged        string
-	From          string // display name of the PC that wrote Merged
-	Items         []Item // per-file decisions, conflicts already resolved (unresolved in a dry run)
-	Backup        string // backup set id for files overwritten or deleted
-	MissingAddons []string
+	Merged string
+	From   string // display name of the PC that wrote Merged
+	Items  []Item // per-file decisions, conflicts already resolved (unresolved in a dry run)
+	Backup string // backup set id for files overwritten or deleted
+
+	MissingAddons []OtherAddons // addons other PCs have that this one doesn't
 
 	// Push only.
 	Snapshot      string // snapshot written
@@ -110,10 +111,11 @@ func (e *Engine) Pull(f wow.Flavor, opt Options) (Report, error) {
 	}
 	if !ok || newest.String() == st.Base {
 		rep.UpToDate = true
-		return rep, nil
+	} else if _, err = e.merge(f, d, st, newest, opt, &rep); err != nil {
+		return rep, err
 	}
-	_, err = e.merge(f, d, st, newest, opt, &rep)
-	return rep, err
+	rep.MissingAddons = e.missingAddons(f, d)
+	return rep, nil
 }
 
 // merge applies snapshot n to the local WTF folder with the three-way rule and returns the new
@@ -132,12 +134,7 @@ func (e *Engine) merge(f wow.Flavor, d *syncdir.Dir, st local.FlavorState, n syn
 	if err != nil {
 		return st, err
 	}
-	installed, err := collect.Addons(f.AddOnsDir())
-	if err != nil {
-		return st, err
-	}
 	rep.Merged, rep.From = n.String(), m.Machine.Name
-	rep.MissingAddons = collect.Missing(installed, m.Addons)
 	localHashes := collect.Hashes(localFiles)
 	if err := caseClash(localHashes, m.Files); err != nil {
 		return st, err

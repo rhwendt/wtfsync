@@ -72,6 +72,7 @@ Key interfaces (names indicative; finalise in the plan):
   wtfsync.json                                   # {"format": 1, "encryption": "none", "created": "<utc>"}
   machines/<uuid>.json                           # {"uuid", "name", "lastSeen"}
   <flavor>/snapshots/<seq>_<utc>_<uuid>.tar.gz   # immutable, never rewritten
+  <flavor>/addons/<uuid>.json                    # that PC's installed addons, rewritten on each push
   <flavor>/sessions/<uuid>.json                  # open session marker (M3)
 ```
 
@@ -117,7 +118,11 @@ A gzip-compressed tar containing `manifest.json` first, then the files at their 
 - `WTF/Account/*/*/*/SavedVariables/*.lua` (per character: `<Account>/<Realm>/<Char>/`)
 - Excluded: `*.lua.bak`, `WTF/Config.wtf`, and everything else under `WTF/`.
 - Addon list: each `Interface/AddOns/*/*.toc` → folder, `## Version`, and any of
-  `## X-Curse-Project-ID`, `## X-Wago-ID`, `## X-WoWI-ID`.
+  `## X-Curse-Project-ID`, `## X-Wago-ID`, `## X-WoWI-ID`. Stored in each snapshot's manifest and,
+  separately, in `<flavor>/addons/<uuid>.json` (so it survives another PC pushing a newer snapshot).
+- Missing addons: `pull`, `push` and `status` list, per other PC, the addons it has that this PC
+  doesn't. Folders sharing a project id or named after a main folder (`ElvUI_Options`) are grouped,
+  with a CurseForge, Wago or WoWInterface link when an id is known. Advice only; never installs.
 
 ### Local data, `%APPDATA%\wtfsync\`
 
@@ -165,7 +170,7 @@ Refused while that flavor's game process is running ("Close WoW Classic first").
 3. Three-way compare; resolve conflicts via the `Prompter`.
 4. Back up every local file about to be overwritten or deleted.
 5. Apply; save new base = this snapshot's name and file hashes.
-6. Print addon differences ("NJ has WeakAuras, not installed here").
+6. Print addon differences ("NJ has addons not installed here: WeakAuras <link>").
 
 ### Push
 

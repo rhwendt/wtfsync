@@ -18,6 +18,8 @@ type Status struct {
 	Reachable    bool
 	LocalChanges int // files changed here since Base
 	PendingPush  bool
+
+	MissingAddons []OtherAddons // addons other PCs have that this one doesn't
 }
 
 func (e *Engine) Status(f wow.Flavor) (Status, error) {
@@ -38,6 +40,7 @@ func (e *Engine) Status(f wow.Flavor) (Status, error) {
 		return s, err
 	}
 	s.Reachable = true
+	s.MissingAddons = e.missingAddons(f, d)
 	n, ok, err := d.Newest(f.Name)
 	if err != nil || !ok {
 		return s, err
