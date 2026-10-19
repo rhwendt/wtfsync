@@ -192,19 +192,6 @@ func TestPullCorruptSnapshotTouchesNothing(t *testing.T) {
 	v.want(pathA, "mine")
 }
 
-func TestPullReportsMissingAddons(t *testing.T) {
-	v := newEnv(t)
-	v.writeLocal("../Interface/AddOns/ElvUI/ElvUI.toc", "## Version: 1")
-	v.remote(1, map[string]string{pathA: "a"}, collect.Addon{Folder: "ElvUI"}, collect.Addon{Folder: "WeakAuras"})
-	rep, err := v.eng.Pull(v.flavor, Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !reflect.DeepEqual(rep.MissingAddons, []string{"WeakAuras"}) {
-		t.Fatalf("missing = %v", rep.MissingAddons)
-	}
-}
-
 func TestPullUnrelatedHistoryAsksInsteadOfTaking(t *testing.T) {
 	v := newEnv(t)
 	// This PC synced with a snapshot the folder doesn't have (e.g. a different sync folder), so

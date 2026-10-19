@@ -27,9 +27,6 @@ func printReport(w io.Writer, op string, r engine.Report, dry bool) {
 		if r.Backup != "" {
 			fmt.Fprintf(w, "  backup %s (undo with: wtfsync restore --flavor %s)\n", r.Backup, r.Flavor)
 		}
-		if len(r.MissingAddons) > 0 {
-			fmt.Fprintf(w, "  %s has addons not installed here: %s\n", r.From, strings.Join(r.MissingAddons, ", "))
-		}
 	}
 	switch {
 	case op == "pull":
@@ -44,6 +41,25 @@ func printReport(w io.Writer, op string, r engine.Report, dry bool) {
 		fmt.Fprintf(w, "%s: would push %d changed file(s)\n", r.Flavor, r.Pushed)
 	default:
 		fmt.Fprintf(w, "%s: pushed %s (%d file(s) changed)\n", r.Flavor, r.Snapshot, r.Pushed)
+	}
+	printMissing(w, r.MissingAddons)
+}
+
+// printMissing lists the addons other PCs have that this one doesn't, with a download link when the
+// addon's .toc names its project.
+func printMissing(w io.Writer, others []engine.OtherAddons) {
+	for _, o := range others {
+		fmt.Fprintf(w, "  %s has addons not installed here:\n", o.Machine)
+		for _, a := range o.Addons {
+			line := a.Name
+			if len(a.Folders) > 1 {
+				line += " (" + strings.Join(a.Folders, ", ") + ")"
+			}
+			if a.URL != "" {
+				line += "  " + a.URL
+			}
+			fmt.Fprintf(w, "    %s\n", line)
+		}
 	}
 }
 
@@ -67,4 +83,5 @@ func printStatus(w io.Writer, s engine.Status) {
 		fmt.Fprint(w, "; push pending")
 	}
 	fmt.Fprintln(w)
+	printMissing(w, s.MissingAddons)
 }

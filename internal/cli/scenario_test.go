@@ -3,6 +3,7 @@ package cli
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -157,4 +158,31 @@ func TestScenarioRestoreCanBeUndone(t *testing.T) {
 	ny.want(svA, "a0")
 	ny.mustRun("restore") // the newest set is now the one restore made
 	ny.want(svA, "a-session")
+}
+
+func (p *pc) install(folder, toc string) {
+	p.t.Helper()
+	dir := filepath.Join(p.wowDir, "_retail_", "Interface", "AddOns", folder)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		p.t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, folder+".toc"), []byte(toc), 0o644); err != nil {
+		p.t.Fatal(err)
+	}
+}
+
+func TestScenarioNewAddonOnOnePCIsFlaggedOnTheOther(t *testing.T) {
+	nj, ny := linkedPair(t, start)
+	nj.install("Plater", "## X-Curse-Project-ID: 100547")
+	nj.write("Account/123#1/SavedVariables/Plater.lua", "p")
+	nj.mustRun("push")
+
+	out := ny.mustRun("pull")
+	contains(t, out, "NJ has addons not installed here:")
+	contains(t, out, "Plater  https://www.curseforge.com/projects/100547")
+	contains(t, ny.mustRun("status"), "Plater") // still reminded after the pull
+	ny.install("Plater", "## X-Curse-Project-ID: 100547")
+	if out := ny.mustRun("status"); strings.Contains(out, "Plater") {
+		t.Fatalf("still flagged after install:\n%s", out)
+	}
 }

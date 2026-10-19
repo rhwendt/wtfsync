@@ -49,23 +49,27 @@ func (e *Engine) Push(f wow.Flavor, opt Options) (Report, error) {
 		return rep, err
 	}
 	hashes := collect.Hashes(files)
+	addons, err := collect.Addons(f.AddOnsDir())
+	if err != nil {
+		return rep, err
+	}
 	rep.Pushed = changed(st.Files, hashes)
-	if rep.Pushed == 0 {
-		rep.UpToDate = true
-		if st.PendingPush && !opt.DryRun {
+	if rep.Pushed == 0 || opt.DryRun {
+		rep.UpToDate = rep.Pushed == 0
+		rep.MissingAddons = e.missingAddons(f, d)
+		if opt.DryRun {
+			return rep, nil
+		}
+		if err := e.recordAddons(f, d, addons); err != nil {
+			return rep, err
+		}
+		if st.PendingPush {
 			st.PendingPush = false
 			return rep, e.Store.SaveState(f.Name, st)
 		}
 		return rep, nil
 	}
-	if opt.DryRun {
-		return rep, nil
-	}
 
-	addons, err := collect.Addons(f.AddOnsDir())
-	if err != nil {
-		return rep, err
-	}
 	name := syncdir.SnapshotName{Seq: 1, Time: e.Now().UTC().Truncate(time.Second), UUID: e.Settings.MachineUUID}
 	if ok {
 		name.Seq = newest.Seq + 1
@@ -93,6 +97,10 @@ func (e *Engine) Push(f wow.Flavor, opt Options) (Report, error) {
 	if err := d.WriteMachine(record); err != nil {
 		return rep, err
 	}
+	if err := e.recordAddons(f, d, addons); err != nil {
+		return rep, err
+	}
+	rep.MissingAddons = e.missingAddons(f, d)
 	return rep, d.Prune(f.Name, keepSnapshots, nil)
 }
 

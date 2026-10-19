@@ -6,6 +6,16 @@ client already syncs (Google Drive for Desktop, OneDrive, iCloud, Dropbox).
 It syncs `WTF/Account/**/SavedVariables/*.lua` for every installed flavor (retail, classic, …).
 It never touches `Config.wtf` (graphics/hardware settings stay per-PC) or addon code.
 
+It doesn't install addons, but it tells you what you're missing. Each push records the PC's
+installed addons, and `pull`, `push` and `status` on the other PC list any it doesn't have, with
+a download link when the addon's `.toc` names its CurseForge, Wago or WoWInterface project:
+
+    NJ has addons not installed here:
+      Plater  https://www.curseforge.com/projects/100547
+      ElvUI (ElvUI, ElvUI_Options)  https://addons.wago.io/addons/…
+
+The settings arrive anyway, so once you install the addon it's already set up.
+
 ## Setup
 
 On your first PC:
