@@ -4,23 +4,21 @@ import (
 	"errors"
 	"fmt"
 	"maps"
-	"path/filepath"
 	"slices"
 	"strconv"
-	"strings"
 
 	"github.com/rhwendt/wtfsync/internal/collect"
-	"github.com/rhwendt/wtfsync/internal/engine"
 	"github.com/rhwendt/wtfsync/internal/fsutil"
 	"github.com/rhwendt/wtfsync/internal/local"
+	"github.com/rhwendt/wtfsync/internal/lock"
+	"github.com/rhwendt/wtfsync/internal/setup"
 	"github.com/rhwendt/wtfsync/internal/syncdir"
 	"github.com/rhwendt/wtfsync/internal/wow"
 )
 
 // setup runs `init` (first PC: create the sync data, then push) or `link` (another PC: join
-// existing sync data, then pull). On a PC that's already set up it asks again with the current
-// answers as defaults and keeps the PC's identity. Moving to another WoW folder or sync folder
-// clears this PC's sync history, so the next sync asks like a first link instead of guessing.
+// existing sync data, then pull) by asking for setup.Answers in the terminal. On a PC that's
+// already set up the current answers are the defaults (see package setup for the rerun rules).
 func (c *cmd) setup(args []string, isInit bool) error {
 	op := map[bool]string{true: "init", false: "link"}[isInit]
 	fl, err := c.parse(op, args)
@@ -29,7 +27,6 @@ func (c *cmd) setup(args []string, isInit bool) error {
 	}
 	store := local.Store{Dir: fl.dataDir}
 	prev, err := store.LoadSettings()
-	rerun := err == nil
 	if err != nil && !errors.Is(err, local.ErrNoSettings) {
 		return err
 	}
@@ -39,12 +36,9 @@ func (c *cmd) setup(args []string, isInit bool) error {
 	if err != nil {
 		return err
 	}
-	flavors, err := wow.Flavors(wowDir)
+	flavors, err := setup.Flavors(wowDir)
 	if err != nil {
 		return err
-	}
-	if len(flavors) == 0 {
-		return fmt.Errorf("no WoW flavors (folders like _retail_) in %s", wowDir)
 	}
 	if err := c.describe(wowDir, flavors, fl.dryRun); err != nil {
 		return err
@@ -61,7 +55,6 @@ func (c *cmd) setup(args []string, isInit bool) error {
 		fmt.Fprintf(c.out, "Sync folder: %s (%s)\nDry run: nothing written.\n", folder, state)
 		return nil
 	}
-
 	name := fl.name
 	if name == "" {
 		def := prev.MachineName
@@ -73,72 +66,31 @@ func (c *cmd) setup(args []string, isInit bool) error {
 		}
 	}
 
-	sameFolder := rerun && samePath(folder, prev.SyncFolder)
-	moved := rerun && (!sameFolder || !samePath(wowDir, prev.WoWDir))
-	var d *syncdir.Dir
-	if isInit && !sameFolder {
-		d, err = syncdir.Init(folder, c.deps.Now(), c.deps.Hydrator)
-		if errors.Is(err, syncdir.ErrAlreadyInitialized) {
-			return fmt.Errorf("%w: run `wtfsync link` on this PC instead", err)
-		}
-	} else {
-		d, err = syncdir.Open(folder, c.deps.Hydrator)
-		if errors.Is(err, syncdir.ErrNotInitialized) {
-			return fmt.Errorf("%w: run `wtfsync init` on your first PC", err)
-		}
-	}
+	l, err := lock.Acquire(fl.dataDir)
 	if err != nil {
 		return err
 	}
-
-	s := local.Settings{MachineUUID: local.NewUUID(), MachineName: name, SyncFolder: folder, WoWDir: wowDir, Flavors: map[string]bool{}}
-	if rerun {
-		s.MachineUUID = prev.MachineUUID
-		maps.Copy(s.Flavors, prev.Flavors)
-	}
-	for _, f := range flavors {
-		if _, ok := s.Flavors[f.Name]; !ok {
-			s.Flavors[f.Name] = true
-		}
-	}
-	if moved {
-		for f := range s.Flavors {
-			if err := store.SaveState(f, local.FlavorState{}); err != nil {
-				return err
-			}
-		}
-	}
-	if err := d.WriteMachine(syncdir.MachineRecord{UUID: s.MachineUUID, Name: name, LastSeen: c.deps.Now()}); err != nil {
-		return err
-	}
-	if err := store.SaveSettings(s); err != nil {
-		return err
+	defer l.Release()
+	env := setup.Env{Store: store, Procs: c.deps.Procs, Hydrator: c.deps.Hydrator, Prompt: c.prompter(), Now: c.deps.Now}
+	res, err := setup.Run(env, setup.Answers{WoWDir: wowDir, SyncFolder: folder, Name: name, First: isInit})
+	switch {
+	case errors.Is(err, syncdir.ErrAlreadyInitialized):
+		return fmt.Errorf("%w: run `wtfsync link` on this PC instead", err)
+	case errors.Is(err, syncdir.ErrNotInitialized):
+		return fmt.Errorf("%w: run `wtfsync init` on your first PC", err)
+	case res.Settings.MachineUUID == "":
+		return err // nothing was saved
 	}
 	fmt.Fprintf(c.out, "This PC is %q.\n", name)
-	if rerun && !moved {
+	if res.Rerun && !res.Moved {
 		fmt.Fprintln(c.out, "Settings updated; sync history kept.")
-		return nil
 	}
-
-	eng := c.engine(store, s)
-	var errs []error
-	for _, f := range flavors {
-		var rep engine.Report
-		if isInit {
-			rep, err = eng.Push(f, engine.Options{})
-		} else {
-			rep, err = eng.Pull(f, engine.Options{})
+	for _, r := range res.Synced {
+		if r.Err == nil {
+			printReport(c.out, map[bool]string{true: "push", false: "pull"}[isInit], r.Report, false)
 		}
-		if err != nil {
-			errs = append(errs, fmt.Errorf("%s: %w", f.Name, err))
-			if errors.Is(err, engine.ErrAborted) {
-				break
-			}
-			continue
-		}
-		printReport(c.out, map[bool]string{true: "push", false: "pull"}[isInit], rep, false)
 	}
-	return errors.Join(errs...)
+	return err
 }
 
 // describe prints the install and how many files each flavor has (and lists them when asked).
@@ -166,12 +118,7 @@ func (c *cmd) chooseWoWDir(p prompter, flagVal, current string) (string, error) 
 	if current != "" {
 		return p.line("WoW install folder", current)
 	}
-	var found []string
-	for _, d := range c.deps.InstallDirs {
-		if fl, err := wow.Flavors(d); err == nil && len(fl) > 0 {
-			found = append(found, d)
-		}
-	}
+	found := setup.FindInstalls(c.deps.InstallDirs)
 	switch len(found) {
 	case 0:
 		return p.line("WoW install folder", "")
@@ -215,14 +162,9 @@ func (c *cmd) chooseSyncFolder(p prompter, flagVal, current string) (string, err
 	}
 	for i, f := range cands {
 		fmt.Fprintf(c.out, "  %d) %s\n", i+1, f)
-		if current != "" && samePath(f, current) {
+		if current != "" && setup.SamePath(f, current) {
 			def = strconv.Itoa(i + 1)
 		}
 	}
 	return pick(p, cands, def)
-}
-
-// samePath compares folders the way Windows does: cleaned and ignoring letter case.
-func samePath(a, b string) bool {
-	return strings.EqualFold(filepath.Clean(a), filepath.Clean(b))
 }
