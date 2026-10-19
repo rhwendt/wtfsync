@@ -60,6 +60,7 @@ type App struct {
 
 	mu       sync.Mutex
 	busy     string
+	closing  bool // Close was called: no new actions or ticks
 	flavors  map[string]*FlavorView
 	update   *update.Release
 	notified map[string]string // flavor → newest snapshot already announced
@@ -157,7 +158,10 @@ func (a *App) Refresh() {
 // Tick runs every 60 s: retry pushes that couldn't reach the sync folder, refresh, and announce
 // newer settings from other PCs (once per snapshot).
 func (a *App) Tick() {
-	if !a.act.TryLock() {
+	a.mu.Lock()
+	closing := a.closing
+	a.mu.Unlock()
+	if closing || !a.act.TryLock() {
 		return // an action is running; it refreshes when it ends
 	}
 	if l, err := lock.Acquire(a.d.Store.Dir); err == nil {
@@ -198,7 +202,7 @@ func (a *App) retryPending(eng *engine.Engine, flavors []wow.Flavor) {
 // another action is already running.
 func (a *App) begin(what string) bool {
 	a.mu.Lock()
-	if a.busy != "" {
+	if a.busy != "" || a.closing {
 		a.mu.Unlock()
 		return false
 	}
@@ -206,6 +210,23 @@ func (a *App) begin(what string) bool {
 	a.mu.Unlock()
 	a.act.Lock()
 	return true
+}
+
+// Close is called before the tray quits. It waits up to wait for a running action or tick to
+// finish, so quitting doesn't stop a pull halfway through writing files, then keeps new ones from
+// starting (actions get ErrBusy; ticks skip). It reports whether nothing was running by then.
+func (a *App) Close(wait time.Duration) bool {
+	a.mu.Lock()
+	a.closing = true
+	a.mu.Unlock()
+	deadline := time.Now().Add(wait)
+	for !a.act.TryLock() {
+		if time.Now().After(deadline) {
+			return false
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	return true // act stays held: nothing runs after this
 }
 
 func (a *App) end() {

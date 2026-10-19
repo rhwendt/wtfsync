@@ -147,7 +147,7 @@ func (u *UI) do(id string) {
 	case "update":
 		go u.installUpdate()
 	case "quit":
-		u.wails.Quit()
+		go u.quit()
 	case "setup":
 		u.open("wizard")
 	case "status", "restore", "addons", "settings":
@@ -163,8 +163,19 @@ func (u *UI) installUpdate() {
 		return cmd.Start()
 	})
 	if err == nil {
-		u.wails.Quit() // the installer replaces the files and starts the new tray
+		u.quit() // the installer replaces the files and starts the new tray
 	}
+}
+
+// quit cancels any open conflict question, gives a running sync up to 8 s to finish so it isn't
+// stopped halfway through writing files (the installer force-closes the tray after 10 s), and
+// quits.
+func (u *UI) quit() {
+	u.prompt.shutdown()
+	if !u.app.Close(8*time.Second) && u.opts.Log != nil {
+		u.opts.Log.Print("quitting while a sync is still running")
+	}
+	u.wails.Quit()
 }
 
 func (u *UI) notify(n app.Notice) {
@@ -182,7 +193,7 @@ func (u *UI) notify(n app.Notice) {
 
 func (u *UI) secondInstance(data application.SecondInstanceData) {
 	if slices.Contains(data.Args, "--quit") {
-		u.wails.Quit()
+		go u.quit()
 		return
 	}
 	if u.app.View().SetUp {

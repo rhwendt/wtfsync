@@ -21,7 +21,8 @@ type prompter struct {
 	open func(window string)
 
 	mu      sync.Mutex
-	last    int // ID of the latest question
+	last    int  // ID of the latest question
+	closed  bool // shutdown was called: every question is cancelled
 	pending *ConflictRequest
 	answer  chan map[string]engine.Choice // nil map = cancelled
 }
@@ -29,6 +30,10 @@ type prompter struct {
 func (p *prompter) Resolve(conflicts []string, other string, firstLink bool) (map[string]engine.Choice, error) {
 	ch := make(chan map[string]engine.Choice, 1)
 	p.mu.Lock()
+	if p.closed {
+		p.mu.Unlock()
+		return nil, engine.ErrAborted
+	}
 	p.last++
 	p.pending = &ConflictRequest{ID: p.last, Other: other, FirstLink: firstLink, Files: conflicts}
 	p.answer = ch
@@ -76,6 +81,15 @@ func (p *prompter) reply(id int, choices map[string]string, cancel bool) {
 		}
 	}
 	ch <- out
+}
+
+// shutdown cancels the open question, if any, and every later one (the tray is quitting).
+func (p *prompter) shutdown() {
+	p.mu.Lock()
+	p.closed = true
+	id := p.last
+	p.mu.Unlock()
+	p.reply(id, nil, true)
 }
 
 // The engine only calls these when a Prompter isn't a BatchPrompter; they route through the

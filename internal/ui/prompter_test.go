@@ -96,3 +96,23 @@ func TestStaleCloseDoesNotCancelTheNextQuestion(t *testing.T) {
 		t.Fatalf("second: got %v, %v; want b.lua kept from NJ", got, err)
 	}
 }
+
+// Quitting the tray cancels the open question and any the sync would ask next.
+func TestShutdownCancelsNowAndLater(t *testing.T) {
+	p := &prompter{}
+	opened := make(chan struct{}, 2)
+	p.open = func(string) { opened <- struct{}{} }
+	errs := make(chan error)
+	go func() { _, err := p.Resolve([]string{"a.lua"}, "NJ", false); errs <- err }()
+	<-opened
+	p.shutdown()
+	if err := <-errs; !errors.Is(err, engine.ErrAborted) {
+		t.Fatalf("open question: err = %v", err)
+	}
+	if _, err := p.Resolve([]string{"b.lua"}, "NJ", false); !errors.Is(err, engine.ErrAborted) {
+		t.Fatalf("later question: err = %v", err)
+	}
+	if len(opened) != 0 {
+		t.Fatal("opened a dialog after shutdown")
+	}
+}

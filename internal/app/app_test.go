@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/rhwendt/wtfsync/internal/engine"
 	"github.com/rhwendt/wtfsync/internal/lock"
@@ -344,4 +345,30 @@ func TestStartsAtLoginAndVersion(t *testing.T) {
 	if New(Deps{}).StartsAtLogin() {
 		t.Fatal("no autostart setting should read as off")
 	}
+}
+
+func TestCloseWaitsForTheRunningAction(t *testing.T) {
+	_, _, _, nyApp := linked(t)
+	nyApp.begin("pulling")
+	go func() { time.Sleep(100 * time.Millisecond); nyApp.end() }()
+	start := time.Now()
+	if !nyApp.Close(5 * time.Second) {
+		t.Fatal("Close gave up while the action was finishing")
+	}
+	if d := time.Since(start); d < 100*time.Millisecond {
+		t.Fatalf("Close returned after %v, before the action ended", d)
+	}
+	if err := nyApp.Push(); !errors.Is(err, ErrBusy) {
+		t.Fatalf("push after Close: err = %v, want ErrBusy", err)
+	}
+	nyApp.Tick() // must not block or run
+}
+
+func TestCloseGivesUpAfterItsWait(t *testing.T) {
+	_, _, _, nyApp := linked(t)
+	nyApp.begin("pulling") // e.g. a conflict dialog nobody answers
+	if nyApp.Close(50 * time.Millisecond) {
+		t.Fatal("Close reported idle while an action was still running")
+	}
+	nyApp.end()
 }
