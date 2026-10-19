@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strconv"
+	"strings"
 
 	"github.com/rhwendt/wtfsync/internal/collect"
 	"github.com/rhwendt/wtfsync/internal/engine"
@@ -17,7 +18,9 @@ import (
 )
 
 // setup runs `init` (first PC: create the sync data, then push) or `link` (another PC: join
-// existing sync data, then pull).
+// existing sync data, then pull). On a PC that's already set up it asks again with the current
+// answers as defaults and keeps the PC's identity. Moving to another WoW folder or sync folder
+// clears this PC's sync history, so the next sync asks like a first link instead of guessing.
 func (c *cmd) setup(args []string, isInit bool) error {
 	op := map[bool]string{true: "init", false: "link"}[isInit]
 	fl, err := c.parse(op, args)
@@ -25,14 +28,14 @@ func (c *cmd) setup(args []string, isInit bool) error {
 		return err
 	}
 	store := local.Store{Dir: fl.dataDir}
-	if _, err := store.LoadSettings(); err == nil {
-		return fmt.Errorf("this PC is already set up (%s)", filepath.Join(fl.dataDir, "settings.json"))
-	} else if !errors.Is(err, local.ErrNoSettings) {
+	prev, err := store.LoadSettings()
+	rerun := err == nil
+	if err != nil && !errors.Is(err, local.ErrNoSettings) {
 		return err
 	}
 
 	p := c.prompter()
-	wowDir, err := c.chooseWoWDir(p, fl.wowDir)
+	wowDir, err := c.chooseWoWDir(p, fl.wowDir, prev.WoWDir)
 	if err != nil {
 		return err
 	}
@@ -46,7 +49,7 @@ func (c *cmd) setup(args []string, isInit bool) error {
 	if err := c.describe(wowDir, flavors, fl.dryRun); err != nil {
 		return err
 	}
-	folder, err := c.chooseSyncFolder(p, fl.syncDir)
+	folder, err := c.chooseSyncFolder(p, fl.syncDir, prev.SyncFolder)
 	if err != nil {
 		return err
 	}
@@ -61,14 +64,19 @@ func (c *cmd) setup(args []string, isInit bool) error {
 
 	name := fl.name
 	if name == "" {
-		host, _ := c.deps.Hostname()
-		if name, err = p.line("Name for this PC", host); err != nil {
+		def := prev.MachineName
+		if def == "" {
+			def, _ = c.deps.Hostname()
+		}
+		if name, err = p.line("Name for this PC", def); err != nil {
 			return err
 		}
 	}
 
+	sameFolder := rerun && samePath(folder, prev.SyncFolder)
+	moved := rerun && (!sameFolder || !samePath(wowDir, prev.WoWDir))
 	var d *syncdir.Dir
-	if isInit {
+	if isInit && !sameFolder {
 		d, err = syncdir.Init(folder, c.deps.Now(), c.deps.Hydrator)
 		if errors.Is(err, syncdir.ErrAlreadyInitialized) {
 			return fmt.Errorf("%w: run `wtfsync link` on this PC instead", err)
@@ -84,8 +92,21 @@ func (c *cmd) setup(args []string, isInit bool) error {
 	}
 
 	s := local.Settings{MachineUUID: local.NewUUID(), MachineName: name, SyncFolder: folder, WoWDir: wowDir, Flavors: map[string]bool{}}
+	if rerun {
+		s.MachineUUID = prev.MachineUUID
+		maps.Copy(s.Flavors, prev.Flavors)
+	}
 	for _, f := range flavors {
-		s.Flavors[f.Name] = true
+		if _, ok := s.Flavors[f.Name]; !ok {
+			s.Flavors[f.Name] = true
+		}
+	}
+	if moved {
+		for f := range s.Flavors {
+			if err := store.SaveState(f, local.FlavorState{}); err != nil {
+				return err
+			}
+		}
 	}
 	if err := d.WriteMachine(syncdir.MachineRecord{UUID: s.MachineUUID, Name: name, LastSeen: c.deps.Now()}); err != nil {
 		return err
@@ -94,6 +115,10 @@ func (c *cmd) setup(args []string, isInit bool) error {
 		return err
 	}
 	fmt.Fprintf(c.out, "This PC is %q.\n", name)
+	if rerun && !moved {
+		fmt.Fprintln(c.out, "Settings updated; sync history kept.")
+		return nil
+	}
 
 	eng := c.engine(store, s)
 	var errs []error
@@ -134,9 +159,12 @@ func (c *cmd) describe(wowDir string, flavors []wow.Flavor, listFiles bool) erro
 	return nil
 }
 
-func (c *cmd) chooseWoWDir(p prompter, flagVal string) (string, error) {
+func (c *cmd) chooseWoWDir(p prompter, flagVal, current string) (string, error) {
 	if flagVal != "" {
 		return flagVal, nil
+	}
+	if current != "" {
+		return p.line("WoW install folder", current)
 	}
 	var found []string
 	for _, d := range c.deps.InstallDirs {
@@ -154,12 +182,12 @@ func (c *cmd) chooseWoWDir(p prompter, flagVal string) (string, error) {
 	for i, d := range found {
 		fmt.Fprintf(c.out, "  %d) %s\n", i+1, d)
 	}
-	return pick(p, found)
+	return pick(p, found, "1")
 }
 
 // pick asks for a number from a listed set of folders, or a typed folder.
-func pick(p prompter, list []string) (string, error) {
-	a, err := p.line("Pick a number or type a folder", "1")
+func pick(p prompter, list []string, def string) (string, error) {
+	a, err := p.line("Pick a number or type a folder", def)
 	if err != nil {
 		return "", err
 	}
@@ -172,17 +200,29 @@ func pick(p prompter, list []string) (string, error) {
 	return a, nil
 }
 
-func (c *cmd) chooseSyncFolder(p prompter, flagVal string) (string, error) {
+func (c *cmd) chooseSyncFolder(p prompter, flagVal, current string) (string, error) {
 	if flagVal != "" {
 		return flagVal, nil
 	}
 	cands := syncdir.Candidates(c.deps.Getenv, fsutil.IsDir)
 	if len(cands) == 0 {
-		return p.line(`Folder your cloud client syncs (e.g. G:\My Drive)`, "")
+		return p.line(`Folder your cloud client syncs (e.g. G:\My Drive)`, current)
 	}
 	fmt.Fprintln(c.out, "Cloud folders found:")
+	def := "1"
+	if current != "" {
+		def = current
+	}
 	for i, f := range cands {
 		fmt.Fprintf(c.out, "  %d) %s\n", i+1, f)
+		if current != "" && samePath(f, current) {
+			def = strconv.Itoa(i + 1)
+		}
 	}
-	return pick(p, cands)
+	return pick(p, cands, def)
+}
+
+// samePath compares folders the way Windows does: cleaned and ignoring letter case.
+func samePath(a, b string) bool {
+	return strings.EqualFold(filepath.Clean(a), filepath.Clean(b))
 }
