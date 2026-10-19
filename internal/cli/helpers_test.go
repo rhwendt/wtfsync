@@ -33,6 +33,8 @@ type pc struct {
 	sync    string
 	procs   *procs
 	clock   *time.Time
+
+	installDirs []string // folders setup checks for a WoW install; default: just wowDir
 }
 
 func newPC(t *testing.T, name, sync string, clock *time.Time) *pc {
@@ -67,6 +69,10 @@ func linkedPair(t *testing.T, files map[string]string) (nj, ny *pc) {
 }
 
 func (p *pc) deps() Deps {
+	dirs := p.installDirs
+	if dirs == nil {
+		dirs = []string{p.wowDir}
+	}
 	return Deps{
 		Procs:          p.procs,
 		Hydrator:       syncdir.TimeoutHydrator{Timeout: 5 * time.Second},
@@ -74,7 +80,7 @@ func (p *pc) deps() Deps {
 		Hostname:       func() (string, error) { return "DESKTOP-" + p.name, nil },
 		Getenv:         func(string) string { return "" },
 		DefaultDataDir: p.dataDir,
-		InstallDirs:    []string{p.wowDir},
+		InstallDirs:    dirs,
 	}
 }
 
