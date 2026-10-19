@@ -18,8 +18,9 @@ type Flavor struct {
 func (f Flavor) WTFDir() string    { return filepath.Join(f.Dir, "WTF") }
 func (f Flavor) AddOnsDir() string { return filepath.Join(f.Dir, "Interface", "AddOns") }
 
-// Flavors lists the flavors under an install root: every _<name>_ folder that contains a WTF
-// folder, in folder-name order.
+// Flavors lists the flavors under an install root: every _<name>_ folder, in folder-name order. A
+// flavor that has never been launched has no WTF folder yet; it has nothing to push but can still
+// receive settings.
 func Flavors(root string) ([]Flavor, error) {
 	entries, err := os.ReadDir(root)
 	if err != nil {
@@ -31,11 +32,7 @@ func Flavors(root string) ([]Flavor, error) {
 		if !e.IsDir() || len(n) < 3 || !strings.HasPrefix(n, "_") || !strings.HasSuffix(n, "_") {
 			continue
 		}
-		dir := filepath.Join(root, n)
-		if fi, err := os.Stat(filepath.Join(dir, "WTF")); err != nil || !fi.IsDir() {
-			continue
-		}
-		out = append(out, Flavor{Name: n[1 : len(n)-1], Dir: dir})
+		out = append(out, Flavor{Name: n[1 : len(n)-1], Dir: filepath.Join(root, n)})
 	}
 	return out, nil
 }

@@ -41,7 +41,7 @@ func (c *cmd) setup(args []string, isInit bool) error {
 		return err
 	}
 	if len(flavors) == 0 {
-		return fmt.Errorf("no WoW flavors (folders like _retail_ with a WTF folder) in %s", wowDir)
+		return fmt.Errorf("no WoW flavors (folders like _retail_) in %s", wowDir)
 	}
 	if err := c.describe(wowDir, flavors, fl.dryRun); err != nil {
 		return err
