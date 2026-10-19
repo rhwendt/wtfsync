@@ -90,17 +90,11 @@ func (s Store) pruneBackups(flavor string) error {
 // Restore puts a backup set back into wtfDir: backed-up files are rewritten and files that were
 // absent at backup time are deleted.
 func (s Store) Restore(flavor, id, wtfDir string) error {
-	if id == "" || id == "." || id == ".." || filepath.Base(id) != id {
-		return fmt.Errorf("invalid backup id %q", id)
-	}
-	dir := s.backupDir(flavor, id)
-	var idx backupIndex
-	if err := readJSON(filepath.Join(dir, "index.json"), &idx); err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			return fmt.Errorf("no backup %q for %s", id, flavor)
-		}
+	idx, err := s.readIndex(flavor, id)
+	if err != nil {
 		return err
 	}
+	dir := s.backupDir(flavor, id)
 	for _, p := range idx.Present {
 		b, err := os.ReadFile(filepath.Join(dir, "files", filepath.FromSlash(p)))
 		if err != nil {
@@ -117,4 +111,30 @@ func (s Store) Restore(flavor, id, wtfDir string) error {
 		}
 	}
 	return nil
+}
+
+// BackupPaths lists the WTF-relative paths a backup set covers: the files it rewrites and the ones
+// it deletes on restore.
+func (s Store) BackupPaths(flavor, id string) ([]string, error) {
+	idx, err := s.readIndex(flavor, id)
+	if err != nil {
+		return nil, err
+	}
+	paths := append(append([]string{}, idx.Present...), idx.Absent...)
+	sort.Strings(paths)
+	return paths, nil
+}
+
+func (s Store) readIndex(flavor, id string) (backupIndex, error) {
+	var idx backupIndex
+	if id == "" || id == "." || id == ".." || filepath.Base(id) != id {
+		return idx, fmt.Errorf("invalid backup id %q", id)
+	}
+	if err := readJSON(filepath.Join(s.backupDir(flavor, id), "index.json"), &idx); err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return idx, fmt.Errorf("no backup %q for %s", id, flavor)
+		}
+		return idx, err
+	}
+	return idx, nil
 }

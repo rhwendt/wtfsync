@@ -137,3 +137,24 @@ func TestScenarioForkSameFileAsks(t *testing.T) {
 	contains(t, out, svA+" changed on NY and on this PC")
 	nj.want(svA, "a-nj")
 }
+
+func TestScenarioRestoreDryRunChangesNothing(t *testing.T) {
+	nj, ny := linkedPair(t, start)
+	nj.write(svA, "a-nj")
+	nj.mustRun("push")
+	ny.mustRun("pull")
+	contains(t, ny.mustRun("restore", "--dry-run"), svA)
+	ny.want(svA, "a-nj")
+}
+
+func TestScenarioRestoreCanBeUndone(t *testing.T) {
+	nj, ny := linkedPair(t, start)
+	nj.write(svA, "a-nj")
+	nj.mustRun("push")
+	ny.mustRun("pull")
+	ny.write(svA, "a-session") // played after pulling; not pushed yet
+	contains(t, ny.mustRun("restore"), "undo with: wtfsync restore")
+	ny.want(svA, "a0")
+	ny.mustRun("restore") // the newest set is now the one restore made
+	ny.want(svA, "a-session")
+}

@@ -49,20 +49,39 @@ func (e *Engine) Status(f wow.Flavor) (Status, error) {
 	return s, nil
 }
 
-// Restore puts back a backup set (the newest when id is "") and returns the id restored.
-func (e *Engine) Restore(f wow.Flavor, id string) (string, error) {
+// RestoreReport describes what Restore did (or, with DryRun, would do).
+type RestoreReport struct {
+	ID    string   // backup set restored
+	Paths []string // files it rewrote or deleted
+	Undo  string   // backup set holding the files as they were just before; "" in a dry run
+}
+
+// Restore puts back a backup set (the newest when id is ""). The files it is about to overwrite or
+// delete are backed up first, so a restore can itself be undone.
+func (e *Engine) Restore(f wow.Flavor, id string, opt Options) (RestoreReport, error) {
 	if err := e.checkNotRunning(f); err != nil {
-		return "", err
+		return RestoreReport{}, err
 	}
 	if id == "" {
 		sets, err := e.Store.BackupSets(f.Name)
 		if err != nil {
-			return "", err
+			return RestoreReport{}, err
 		}
 		if len(sets) == 0 {
-			return "", fmt.Errorf("no backups for %s yet", f.Name)
+			return RestoreReport{}, fmt.Errorf("no backups for %s yet", f.Name)
 		}
 		id = sets[0]
 	}
-	return id, e.Store.Restore(f.Name, id, f.WTFDir())
+	paths, err := e.Store.BackupPaths(f.Name, id)
+	if err != nil {
+		return RestoreReport{}, err
+	}
+	rep := RestoreReport{ID: id, Paths: paths}
+	if opt.DryRun {
+		return rep, nil
+	}
+	if rep.Undo, err = e.Store.Backup(f.Name, f.WTFDir(), paths, e.Now()); err != nil {
+		return rep, err
+	}
+	return rep, e.Store.Restore(f.Name, id, f.WTFDir())
 }

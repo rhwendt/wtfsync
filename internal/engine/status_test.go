@@ -43,16 +43,16 @@ func TestRestoreNewestBackup(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	id, err := v.eng.Restore(v.flavor, "")
-	if err != nil || id != rep.Backup {
-		t.Fatalf("id %q, err %v; want %q", id, err, rep.Backup)
+	r, err := v.eng.Restore(v.flavor, "", Options{})
+	if err != nil || r.ID != rep.Backup {
+		t.Fatalf("id %q, err %v; want %q", r.ID, err, rep.Backup)
 	}
 	v.want(pathA, "a1")
 }
 
 func TestRestoreNoBackups(t *testing.T) {
 	v := newEnv(t)
-	if _, err := v.eng.Restore(v.flavor, ""); err == nil {
+	if _, err := v.eng.Restore(v.flavor, "", Options{}); err == nil {
 		t.Fatal("want error with no backups")
 	}
 }
@@ -60,7 +60,7 @@ func TestRestoreNoBackups(t *testing.T) {
 func TestRestoreRefusedWhileGameRunning(t *testing.T) {
 	v := newEnv(t)
 	v.procs.running = true
-	if _, err := v.eng.Restore(v.flavor, ""); !errors.Is(err, ErrGameRunning) {
+	if _, err := v.eng.Restore(v.flavor, "", Options{}); !errors.Is(err, ErrGameRunning) {
 		t.Fatalf("err = %v", err)
 	}
 }

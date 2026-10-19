@@ -68,16 +68,26 @@ func (c *cmd) one(eng *engine.Engine, op string, f wow.Flavor, fl flags, opt eng
 		}
 		printStatus(c.out, st)
 	case "restore":
-		id, err := eng.Restore(f, fl.set)
+		r, err := eng.Restore(f, fl.set, opt)
 		if err != nil {
 			return err
 		}
-		fmt.Fprintf(c.out, "%s: restored backup %s\n", f.Name, id)
+		verb := "restored"
+		if opt.DryRun {
+			verb = "would restore"
+		}
+		fmt.Fprintf(c.out, "%s: %s backup %s\n", f.Name, verb, r.ID)
+		for _, p := range r.Paths {
+			fmt.Fprintf(c.out, "  %s\n", p)
+		}
+		if r.Undo != "" {
+			fmt.Fprintf(c.out, "  undo with: wtfsync restore --flavor %s --set %s\n", f.Name, r.Undo)
+		}
 		sets, err := eng.Store.BackupSets(f.Name)
 		if err != nil {
 			return err
 		}
-		if others := slices.DeleteFunc(sets, func(s string) bool { return s == id }); len(others) > 0 {
+		if others := slices.DeleteFunc(sets, func(s string) bool { return s == r.ID || s == r.Undo }); len(others) > 0 {
 			fmt.Fprintf(c.out, "  older backups (use --set): %s\n", strings.Join(others, ", "))
 		}
 	}
