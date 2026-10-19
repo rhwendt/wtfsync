@@ -40,9 +40,9 @@ either PC picks up where the other left off.
 
 ## Architecture
 
-One binary. `wtfsync.exe` with no arguments starts the tray app (M2+); with a subcommand it runs
-the CLI. It is built as a GUI-subsystem executable (no console window for the tray); in CLI mode
-it attaches to the parent console (`AttachConsole(ATTACH_PARENT_PROCESS)`) so output prints.
+Two executables sharing all sync code (changed in M2, see the
+[M2 design](2026-10-19-m2-tray-installer-design.md)): `wtfsync.exe` is the console CLI and
+`wtfsync-tray.exe` is the GUI-subsystem tray app.
 
 | Package | Job | Depends on | Windows-only parts (behind interfaces, faked in tests) |
 |---|---|---|---|
@@ -211,13 +211,9 @@ Exit codes: `0` ok, `1` error, `2` refused (game running / not hydrated), `3` un
 
 ## Tray app (M2)
 
-- Menu: **Push**, **Pull**, **Status**, **Restore previous**, **Settings**, **Quit**; icon shows
-  idle / syncing / needs attention.
-- Setup wizard mirrors `init`/`link`; shown when no `settings.json` exists.
-- Conflict dialog: one row per conflicting file with *keep <other PC> / keep this PC*, plus
-  "apply to all".
-- Settings: start at login (HKCU `…\Run` key), per-flavor toggles, display name.
-- Tray tick every 60s: retry any pending push, refresh status.
+Designed in [`2026-10-19-m2-tray-installer-design.md`](2026-10-19-m2-tray-installer-design.md):
+tray icon and menu, setup wizard, conflict dialog, settings (start at login, per-flavor toggles,
+display name), a per-user installer, and one-click updates from GitHub Releases.
 
 ## Automation (M3)
 
