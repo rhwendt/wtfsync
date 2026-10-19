@@ -47,6 +47,13 @@ type Prompter interface {
 	Conflict(path, other string) (Choice, error)
 }
 
+// BatchPrompter is an optional Prompter that settles every conflict in one go (the tray's
+// conflict dialog). firstLink is true when this PC has never synced the flavor. Every path in
+// conflicts must get a choice; a missing one, or an error, writes nothing.
+type BatchPrompter interface {
+	Resolve(conflicts []string, other string, firstLink bool) (map[string]Choice, error)
+}
+
 type Engine struct {
 	Store    local.Store
 	Settings local.Settings
@@ -187,6 +194,9 @@ func (e *Engine) resolve(items []Item, firstLink bool, other string) ([]Item, er
 	if conflicts == 0 {
 		return items, nil
 	}
+	if bp, ok := e.Prompt.(BatchPrompter); ok {
+		return resolveBatch(bp, items, firstLink, other)
+	}
 	all := Conflict // Conflict = ask per file
 	if firstLink {
 		c, err := e.Prompt.FirstLink(conflicts, other)
@@ -236,6 +246,35 @@ func caseClash(local, remote map[string]string) error {
 		}
 	}
 	return nil
+}
+
+func resolveBatch(bp BatchPrompter, items []Item, firstLink bool, other string) ([]Item, error) {
+	var paths []string
+	for _, it := range items {
+		if it.Action == Conflict {
+			paths = append(paths, it.Path)
+		}
+	}
+	choices, err := bp.Resolve(paths, other, firstLink)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Item, len(items))
+	copy(out, items)
+	for i := range out {
+		if out[i].Action != Conflict {
+			continue
+		}
+		c, ok := choices[out[i].Path]
+		if !ok {
+			return nil, fmt.Errorf("%w: no choice for %s", ErrAborted, out[i].Path)
+		}
+		out[i].Action = KeepLocal
+		if c == ChooseRemote {
+			out[i].Action = TakeRemote
+		}
+	}
+	return out, nil
 }
 
 // apply writes the snapshot's version of path, or deletes the local file if the snapshot has none.
