@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -39,10 +40,20 @@ func Flavors(root string) ([]Flavor, error) {
 	return out, nil
 }
 
-// DefaultInstallDirs are the usual Windows install roots, most likely first.
+// DefaultInstallDirs are the places WoW is usually installed, on every drive letter, most likely
+// first: the Battle.net default on C:, then the usual spots on each drive.
 func DefaultInstallDirs() []string {
-	return []string{
+	dirs := []string{
 		`C:\Program Files (x86)\World of Warcraft`,
 		`C:\Program Files\World of Warcraft`,
 	}
+	for d := 'C'; d <= 'Z'; d++ {
+		for _, sub := range []string{`World of Warcraft`, `Games\World of Warcraft`, `Battle.net\World of Warcraft`, `Program Files (x86)\World of Warcraft`, `Program Files\World of Warcraft`} {
+			p := string(d) + `:\` + sub
+			if !slices.Contains(dirs, p) {
+				dirs = append(dirs, p)
+			}
+		}
+	}
+	return dirs
 }

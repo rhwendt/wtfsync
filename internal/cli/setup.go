@@ -138,14 +138,38 @@ func (c *cmd) chooseWoWDir(p prompter, flagVal string) (string, error) {
 	if flagVal != "" {
 		return flagVal, nil
 	}
-	def := ""
+	var found []string
 	for _, d := range c.deps.InstallDirs {
-		if fsutil.IsDir(d) {
-			def = d
-			break
+		if fl, err := wow.Flavors(d); err == nil && len(fl) > 0 {
+			found = append(found, d)
 		}
 	}
-	return p.line("WoW install folder", def)
+	switch len(found) {
+	case 0:
+		return p.line("WoW install folder", "")
+	case 1:
+		return p.line("WoW install folder", found[0])
+	}
+	fmt.Fprintln(c.out, "WoW installs found:")
+	for i, d := range found {
+		fmt.Fprintf(c.out, "  %d) %s\n", i+1, d)
+	}
+	return pick(p, found)
+}
+
+// pick asks for a number from a listed set of folders, or a typed folder.
+func pick(p prompter, list []string) (string, error) {
+	a, err := p.line("Pick a number or type a folder", "1")
+	if err != nil {
+		return "", err
+	}
+	if i, err := strconv.Atoi(a); err == nil {
+		if i < 1 || i > len(list) {
+			return "", fmt.Errorf("no folder numbered %d", i)
+		}
+		return list[i-1], nil
+	}
+	return a, nil
 }
 
 func (c *cmd) chooseSyncFolder(p prompter, flagVal string) (string, error) {
@@ -160,15 +184,5 @@ func (c *cmd) chooseSyncFolder(p prompter, flagVal string) (string, error) {
 	for i, f := range cands {
 		fmt.Fprintf(c.out, "  %d) %s\n", i+1, f)
 	}
-	a, err := p.line("Pick a number or type a folder", "1")
-	if err != nil {
-		return "", err
-	}
-	if i, err := strconv.Atoi(a); err == nil {
-		if i < 1 || i > len(cands) {
-			return "", fmt.Errorf("no folder numbered %d", i)
-		}
-		return cands[i-1], nil
-	}
-	return a, nil
+	return pick(p, cands)
 }

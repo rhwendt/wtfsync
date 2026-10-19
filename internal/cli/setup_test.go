@@ -3,6 +3,7 @@ package cli
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/rhwendt/wtfsync/internal/local"
@@ -128,5 +129,44 @@ func TestUnknownCommandAndNoArgs(t *testing.T) {
 		t.Fatalf("help exit %d", code)
 	} else {
 		contains(t, out, "usage: wtfsync")
+	}
+}
+
+func TestTypedFolderMayBeQuoted(t *testing.T) {
+	// Explorer's "Copy as path" wraps the path in double quotes; people paste it as is.
+	for _, quote := range []string{`"`, `'`} {
+		nj, _ := newPair(t)
+		stdin := quote + nj.wowDir + quote + "\n"
+		code, out := nj.run(stdin, "init", "--sync-dir", nj.sync, "--name", "NJ")
+		if code != 0 {
+			t.Fatalf("quote %s: exit %d\n%s", quote, code, out)
+		}
+		s, _ := local.Store{Dir: nj.dataDir}.LoadSettings()
+		if s.WoWDir != nj.wowDir {
+			t.Fatalf("quote %s: wowDir = %q", quote, s.WoWDir)
+		}
+	}
+}
+
+func TestSetupListsEveryWoWInstallFound(t *testing.T) {
+	nj, _ := newPair(t)
+	second := filepath.Join(t.TempDir(), "World of Warcraft")
+	if err := os.MkdirAll(filepath.Join(second, "_classic_era_", "WTF"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	notWoW := t.TempDir() // exists, but has no flavor folders
+	nj.installDirs = []string{notWoW, nj.wowDir, filepath.Join(t.TempDir(), "missing"), second}
+	code, out := nj.run("2\n", "init", "--sync-dir", nj.sync, "--name", "NJ")
+	if code != 0 {
+		t.Fatalf("exit %d\n%s", code, out)
+	}
+	contains(t, out, "1) "+nj.wowDir)
+	contains(t, out, "2) "+second)
+	if strings.Contains(out, notWoW) {
+		t.Fatalf("listed a folder with no WoW in it:\n%s", out)
+	}
+	s, _ := local.Store{Dir: nj.dataDir}.LoadSettings()
+	if s.WoWDir != second {
+		t.Fatalf("wowDir = %q, want %q", s.WoWDir, second)
 	}
 }

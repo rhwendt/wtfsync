@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"testing"
 )
 
@@ -40,5 +41,17 @@ func TestFlavorPaths(t *testing.T) {
 	}
 	if got, want := f.AddOnsDir(), filepath.Join("wow", "_retail_", "Interface", "AddOns"); got != want {
 		t.Errorf("AddOnsDir = %q, want %q", got, want)
+	}
+}
+
+func TestDefaultInstallDirsCoverEveryDrive(t *testing.T) {
+	dirs := DefaultInstallDirs()
+	if dirs[0] != `C:\Program Files (x86)\World of Warcraft` {
+		t.Fatalf("first = %q, want the standard install path", dirs[0])
+	}
+	for _, want := range []string{`D:\World of Warcraft`, `E:\Games\World of Warcraft`, `Z:\Program Files\World of Warcraft`} {
+		if !slices.Contains(dirs, want) {
+			t.Errorf("missing %q", want)
+		}
 	}
 }
