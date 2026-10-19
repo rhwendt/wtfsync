@@ -12,6 +12,9 @@ import (
 	"github.com/rhwendt/wtfsync/internal/wow"
 )
 
+// version is set at build time with -ldflags "-X main.version=v1.2.3".
+var version = "dev"
+
 func main() {
 	cfg, err := os.UserConfigDir() // %APPDATA% on Windows
 	if err != nil {
@@ -26,5 +29,6 @@ func main() {
 		Getenv:         os.Getenv,
 		DefaultDataDir: filepath.Join(cfg, "wtfsync"),
 		InstallDirs:    wow.DefaultInstallDirs(),
+		Version:        version,
 	}))
 }
