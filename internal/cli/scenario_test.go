@@ -1,6 +1,10 @@
 package cli
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
 
 var start = map[string]string{svA: "a0", svB: "b0", svC: "c0"}
 
@@ -83,4 +87,53 @@ func TestScenarioGameRunningRefusesPull(t *testing.T) {
 		t.Fatalf("exit %d, want 2", code)
 	}
 	ny.want(svA, "a0")
+}
+
+// fork has NJ and NY both push seq 2 on top of seq 1 without seeing each other's push (cloud lag):
+// NJ's snapshot is hidden while NY pushes, then reappears. NY's is newer, so NJ is the one behind.
+func fork(t *testing.T, njEdit, nyEdit [2]string) (nj, ny *pc) {
+	t.Helper()
+	nj, ny = linkedPair(t, start)
+	nj.write(njEdit[0], njEdit[1])
+	nj.mustRun("push")
+	snaps := filepath.Join(nj.sync, "wtfsync", "retail", "snapshots")
+	hidden := filepath.Join(t.TempDir(), "hidden")
+	all, _ := filepath.Glob(filepath.Join(snaps, "000002_*"))
+	if len(all) != 1 {
+		t.Fatalf("NJ snapshots: %v", all)
+	}
+	if err := os.Rename(all[0], hidden); err != nil {
+		t.Fatal(err)
+	}
+	ny.write(nyEdit[0], nyEdit[1])
+	contains(t, ny.mustRun("push"), "000002_")
+	if err := os.Rename(hidden, all[0]); err != nil {
+		t.Fatal(err)
+	}
+	return nj, ny
+}
+
+func TestScenarioForkKeepsBothPCsChanges(t *testing.T) {
+	nj, ny := fork(t, [2]string{svA, "a-nj"}, [2]string{svB, "b-ny"})
+	nj.mustRun("pull")
+	nj.want(svA, "a-nj") // NJ's own edit must survive merging NY's sibling snapshot
+	nj.want(svB, "b-ny")
+	nj.mustRun("push")
+	ny.mustRun("pull")
+	ny.want(svA, "a-nj")
+	ny.want(svB, "b-ny")
+}
+
+func TestScenarioForkSameFileAsks(t *testing.T) {
+	nj, _ := fork(t, [2]string{svA, "a-nj"}, [2]string{svA, "a-ny"})
+	if code, out := nj.run("", "pull"); code != 3 {
+		t.Fatalf("closed stdin: exit %d, want 3 (conflict)\n%s", code, out)
+	}
+	nj.want(svA, "a-nj")
+	code, out := nj.run("l\n", "pull")
+	if code != 0 {
+		t.Fatalf("exit %d\n%s", code, out)
+	}
+	contains(t, out, svA+" changed on NY and on this PC")
+	nj.want(svA, "a-nj")
 }

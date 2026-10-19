@@ -203,3 +203,21 @@ func TestPullReportsMissingAddons(t *testing.T) {
 		t.Fatalf("missing = %v", rep.MissingAddons)
 	}
 }
+
+func TestPullUnrelatedHistoryAsksInsteadOfTaking(t *testing.T) {
+	v := newEnv(t)
+	// This PC synced with a snapshot the folder doesn't have (e.g. a different sync folder), so
+	// its base says nothing about NJ's snapshot: "local == base" must not mean "take remote".
+	gone := syncdir.SnapshotName{Seq: 7, Time: v.clock, UUID: nyUUID}
+	v.synced(gone, map[string]string{pathA: "a-mine"})
+	v.writeLocal(pathA, "a-mine")
+	v.remote(1, map[string]string{pathA: "a-nj"})
+	v.prompt.choices = []Choice{ChooseLocal}
+	if _, err := v.eng.Pull(v.flavor, Options{}); err != nil {
+		t.Fatal(err)
+	}
+	if len(v.prompt.asked) != 1 || v.prompt.asked[0] != pathA {
+		t.Fatalf("asked %v, want [%s]", v.prompt.asked, pathA)
+	}
+	v.want(pathA, "a-mine")
+}

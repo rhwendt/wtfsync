@@ -137,7 +137,13 @@ func (e *Engine) merge(f wow.Flavor, d *syncdir.Dir, st local.FlavorState, n syn
 	}
 	rep.Merged, rep.From = n.String(), m.Machine.Name
 	rep.MissingAddons = collect.Missing(installed, m.Addons)
-	items := Plan(st.Files, collect.Hashes(localFiles), m.Files)
+	base, known := mergeBase(d, f.Name, st, n, m)
+	items := Plan(base, collect.Hashes(localFiles), m.Files)
+	if !known {
+		for i := range items {
+			items[i].Action = Conflict
+		}
+	}
 	if opt.DryRun {
 		rep.Items = items
 		return st, nil

@@ -135,16 +135,23 @@ func (v *env) local(path string) (string, bool) {
 	return string(b), true
 }
 
-// remote writes a snapshot from NJ with the given seq and file contents and returns its name.
+// remote writes a snapshot from NJ with the given seq and file contents and returns its name. Like
+// a real push, its base is the newest snapshot already in the folder.
 func (v *env) remote(seq int, files map[string]string, addons ...collect.Addon) syncdir.SnapshotName {
 	v.t.Helper()
+	var base string
+	if prev, ok, err := v.sync.Newest("retail"); err != nil {
+		v.t.Fatal(err)
+	} else if ok {
+		base = prev.String()
+	}
 	v.clock = v.clock.Add(time.Minute)
 	n := syncdir.SnapshotName{Seq: seq, Time: v.clock, UUID: njUUID}
 	content := map[string][]byte{}
 	for p, s := range files {
 		content[p] = []byte(s)
 	}
-	m := archive.Manifest{Machine: archive.Machine{UUID: njUUID, Name: "NJ"}, Created: v.clock, Flavor: "retail", Seq: seq, Addons: addons}
+	m := archive.Manifest{Machine: archive.Machine{UUID: njUUID, Name: "NJ"}, Created: v.clock, Flavor: "retail", Seq: seq, Base: base, Addons: addons}
 	var buf bytes.Buffer
 	if err := archive.Write(&buf, m, content); err != nil {
 		v.t.Fatal(err)
