@@ -29,6 +29,16 @@ up the files it overwrites; `wtfsync restore` puts the last backup back.
 
 Add `--dry-run` to any command to see what it would do without changing anything.
 
+## Download
+
+Grab `wtfsync.exe` from the latest [release](https://github.com/rhwendt/wtfsync/releases/latest).
+
+Releases are automatic: every merge to `main` that includes a `feat:`, `fix:`, `perf:` or breaking
+change ([Conventional Commits](https://www.conventionalcommits.org/)) publishes a new version. `fix`
+bumps the patch number, `feat` the minor, and a breaking change (`feat!:` or a `BREAKING CHANGE:`
+footer) the major (the minor while still 0.x). Merges with only `docs:`, `chore:`, `ci:`, `test:` or
+`refactor:` commits don't release.
+
 ## Build
 
     GOOS=windows GOARCH=amd64 go build -o wtfsync.exe ./cmd/wtfsync
