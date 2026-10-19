@@ -3,6 +3,7 @@ package engine
 import (
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -220,4 +221,22 @@ func TestPullUnrelatedHistoryAsksInsteadOfTaking(t *testing.T) {
 		t.Fatalf("asked %v, want [%s]", v.prompt.asked, pathA)
 	}
 	v.want(pathA, "a-mine")
+}
+
+func TestPullRefusesPathsDifferingOnlyInCase(t *testing.T) {
+	v := newEnv(t)
+	lower := "Account/123#1/SavedVariables/details.lua"
+	s1 := v.remote(1, map[string]string{lower: "d"})
+	v.synced(s1, map[string]string{lower: "d"})
+	v.writeLocal(lower, "d")
+	// The other PC's copy has a different letter case. On Windows both names are the same file, so
+	// writing Details.lua then deleting details.lua would lose it.
+	v.remote(2, map[string]string{"Account/123#1/SavedVariables/Details.lua": "d2"})
+	if _, err := v.eng.Pull(v.flavor, Options{}); err == nil || !strings.Contains(err.Error(), "letter case") {
+		t.Fatalf("err = %v, want a letter-case error", err)
+	}
+	v.want(lower, "d")
+	if st := v.state(); st.Base != s1.String() {
+		t.Fatalf("base moved to %s", st.Base)
+	}
 }

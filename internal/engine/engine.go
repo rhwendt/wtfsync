@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/rhwendt/wtfsync/internal/archive"
@@ -137,8 +138,12 @@ func (e *Engine) merge(f wow.Flavor, d *syncdir.Dir, st local.FlavorState, n syn
 	}
 	rep.Merged, rep.From = n.String(), m.Machine.Name
 	rep.MissingAddons = collect.Missing(installed, m.Addons)
+	localHashes := collect.Hashes(localFiles)
+	if err := caseClash(localHashes, m.Files); err != nil {
+		return st, err
+	}
 	base, known := mergeBase(d, f.Name, st, n, m)
-	items := Plan(base, collect.Hashes(localFiles), m.Files)
+	items := Plan(base, localHashes, m.Files)
 	if !known {
 		for i := range items {
 			items[i].Action = Conflict
@@ -218,6 +223,22 @@ func (e *Engine) resolve(items []Item, firstLink bool, other string) ([]Item, er
 		}
 	}
 	return out, nil
+}
+
+// caseClash refuses paths that differ only in letter case between this PC and the snapshot. Windows
+// treats them as one file, so applying both (write one name, delete the other) would lose it.
+func caseClash(local, remote map[string]string) error {
+	seen := map[string]string{}
+	for _, m := range []map[string]string{local, remote} {
+		for p := range m {
+			k := strings.ToLower(p)
+			if q, ok := seen[k]; ok && q != p {
+				return fmt.Errorf("%s and %s differ only in letter case; rename the folder on one PC so they match", min(p, q), max(p, q))
+			}
+			seen[k] = p
+		}
+	}
+	return nil
 }
 
 // apply writes the snapshot's version of path, or deletes the local file if the snapshot has none.
