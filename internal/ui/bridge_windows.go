@@ -79,9 +79,9 @@ func (b *Bridge) Setup(a setup.Answers) ([]string, error) {
 
 func (b *Bridge) Conflicts() ConflictRequest { return b.u.prompt.request() }
 
-// AnswerConflicts settles the waiting conflicts: path → "remote" or "local".
-func (b *Bridge) AnswerConflicts(choices map[string]string, cancel bool) {
-	b.u.prompt.reply(choices, cancel)
+// AnswerConflicts settles conflict question id: path → "remote" or "local".
+func (b *Bridge) AnswerConflicts(id int, choices map[string]string, cancel bool) {
+	b.u.prompt.reply(id, choices, cancel)
 }
 
 type StatusPage struct {

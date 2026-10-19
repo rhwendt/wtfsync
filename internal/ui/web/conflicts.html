@@ -5,7 +5,9 @@
 import { call, close, h, show } from "./app.js";
 
 const req = await call("Conflicts");
-const answer = (choices) => { call("AnswerConflicts", choices, false); close(); };
+// Answer before closing: the window's close event cancels this question if it's still open.
+const reply = async (choices, cancel) => { await call("AnswerConflicts", req.ID, choices, cancel); close(); };
+const answer = (choices) => reply(choices, false);
 const all = (c) => Object.fromEntries(req.Files.map((f) => [f, c]));
 
 function perFile() {
@@ -20,7 +22,7 @@ function perFile() {
     h("div", { class: "actions" },
       h("button", { onclick: () => setAll("remote") }, `All ${req.Other}'s`),
       h("button", { onclick: () => setAll("local") }, "All this PC's"),
-      h("button", { onclick: () => { call("AnswerConflicts", null, true); close(); } }, "Cancel"),
+      h("button", { onclick: () => reply(null, true) }, "Cancel"),
       h("button", { class: "primary", onclick: () => answer(Object.fromEntries(rows.map((r) => [r.f, r.sel.value]))) }, "Apply")),
   );
 }
@@ -31,7 +33,7 @@ if (!req.Files || req.Files.length === 0) {
   show(
     h("p", {}, `This PC and ${req.Other} both have settings for ${req.Files.length} file(s).`),
     h("div", { class: "actions" },
-      h("button", { onclick: () => { call("AnswerConflicts", null, true); close(); } }, "Cancel"),
+      h("button", { onclick: () => reply(null, true) }, "Cancel"),
       h("button", { onclick: perFile }, "Choose per file…"),
       h("button", { onclick: () => answer(all("local")) }, "Keep this PC's"),
       h("button", { class: "primary", onclick: () => answer(all("remote")) }, `Use ${req.Other}'s for all`)),

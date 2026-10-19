@@ -8,6 +8,7 @@ package ui
 import (
 	"context"
 	"embed"
+	"fmt"
 	"io/fs"
 	"log"
 	"os"
@@ -205,8 +206,13 @@ var pages = map[string]page{
 	"restore":   {"Restore last backup", 600, 440},
 }
 
-// open shows a window, focusing it if it's already open.
+// open shows a window, focusing it if it's already open. Each conflict question gets a window
+// of its own, and closing it cancels only that question.
 func (u *UI) open(name string) {
+	if name == "conflicts" {
+		u.openConflicts(u.prompt.request().ID)
+		return
+	}
 	application.InvokeAsync(func() {
 		if w, ok := u.wails.Window.GetByName(name); ok {
 			w.Show()
@@ -217,9 +223,18 @@ func (u *UI) open(name string) {
 		w := u.wails.Window.NewWithOptions(application.WebviewWindowOptions{
 			Name: name, Title: "wtfsync — " + p.title, Width: p.width, Height: p.height, URL: "/" + name + ".html",
 		})
-		if name == "conflicts" {
-			w.OnWindowEvent(events.Common.WindowClosing, func(*application.WindowEvent) { u.prompt.reply(nil, true) })
-		}
+		w.Show()
+	})
+}
+
+func (u *UI) openConflicts(id int) {
+	application.InvokeAsync(func() {
+		p := pages["conflicts"]
+		w := u.wails.Window.NewWithOptions(application.WebviewWindowOptions{
+			Name: fmt.Sprintf("conflicts-%d", id), Title: "wtfsync — " + p.title, Width: p.width, Height: p.height,
+			URL: fmt.Sprintf("/conflicts.html?id=%d", id),
+		})
+		w.OnWindowEvent(events.Common.WindowClosing, func(*application.WindowEvent) { u.prompt.reply(id, nil, true) })
 		w.Show()
 	})
 }

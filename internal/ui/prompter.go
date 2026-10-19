@@ -8,6 +8,7 @@ import (
 
 // ConflictRequest is what the conflict dialog shows.
 type ConflictRequest struct {
+	ID        int      // which question this is; replies and window closes name it
 	Other     string   // the other PC's display name
 	FirstLink bool     // this PC has never synced the flavor: offer the one-question choice
 	Files     []string // conflicting paths, relative to WTF/
@@ -15,10 +16,12 @@ type ConflictRequest struct {
 
 // prompter is the engine's BatchPrompter: it opens the conflict dialog and waits for the answer.
 // The dialog reads the request with request and answers with reply; closing the window cancels.
+// Every question gets a new ID so a reply or close meant for an earlier dialog can't answer it.
 type prompter struct {
 	open func(window string)
 
 	mu      sync.Mutex
+	last    int // ID of the latest question
 	pending *ConflictRequest
 	answer  chan map[string]engine.Choice // nil map = cancelled
 }
@@ -26,7 +29,8 @@ type prompter struct {
 func (p *prompter) Resolve(conflicts []string, other string, firstLink bool) (map[string]engine.Choice, error) {
 	ch := make(chan map[string]engine.Choice, 1)
 	p.mu.Lock()
-	p.pending = &ConflictRequest{Other: other, FirstLink: firstLink, Files: conflicts}
+	p.last++
+	p.pending = &ConflictRequest{ID: p.last, Other: other, FirstLink: firstLink, Files: conflicts}
 	p.answer = ch
 	p.mu.Unlock()
 	p.open("conflicts")
@@ -47,16 +51,17 @@ func (p *prompter) request() ConflictRequest {
 	return *p.pending
 }
 
-// reply answers the waiting question once: choices maps path → "remote" or "local"; cancel (or
-// closing the window) answers nil. Later replies, and replies with nothing waiting, are ignored.
-func (p *prompter) reply(choices map[string]string, cancel bool) {
+// reply answers question id once: choices maps path → "remote" or "local"; cancel (or closing
+// the window) answers nil. Replies to any other question, or a second reply, are ignored.
+func (p *prompter) reply(id int, choices map[string]string, cancel bool) {
 	p.mu.Lock()
+	if p.pending == nil || p.pending.ID != id {
+		p.mu.Unlock()
+		return
+	}
 	ch := p.answer
 	p.pending, p.answer = nil, nil
 	p.mu.Unlock()
-	if ch == nil {
-		return
-	}
 	if cancel {
 		ch <- nil
 		return
