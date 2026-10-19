@@ -1,0 +1,42 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><link rel="stylesheet" href="app.css"><title>Conflicts</title></head>
+<body><h1>Settings changed on both PCs</h1><div id="main"></div><div id="msg"></div>
+<script type="module">
+import { call, close, h, show } from "./app.js";
+
+const req = await call("Conflicts");
+const answer = (choices) => { call("AnswerConflicts", choices, false); close(); };
+const all = (c) => Object.fromEntries(req.Files.map((f) => [f, c]));
+
+function perFile() {
+  const rows = req.Files.map((f) => {
+    const sel = h("select", {}, h("option", { value: "remote" }, `keep ${req.Other}'s`), h("option", { value: "local" }, "keep this PC's"));
+    return { f, sel, tr: h("tr", {}, h("td", {}, h("code", {}, f)), h("td", {}, sel)) };
+  });
+  const setAll = (c) => rows.forEach((r) => (r.sel.value = c));
+  show(
+    h("p", {}, `These files changed on ${req.Other} and on this PC since they last synced. Choose which to keep:`),
+    h("table", {}, rows.map((r) => r.tr)),
+    h("div", { class: "actions" },
+      h("button", { onclick: () => setAll("remote") }, `All ${req.Other}'s`),
+      h("button", { onclick: () => setAll("local") }, "All this PC's"),
+      h("button", { onclick: () => { call("AnswerConflicts", null, true); close(); } }, "Cancel"),
+      h("button", { class: "primary", onclick: () => answer(Object.fromEntries(rows.map((r) => [r.f, r.sel.value]))) }, "Apply")),
+  );
+}
+
+if (!req.Files || req.Files.length === 0) {
+  show(h("p", { class: "muted" }, "Nothing to decide."), h("div", { class: "actions" }, h("button", { onclick: close }, "Close")));
+} else if (req.FirstLink) {
+  show(
+    h("p", {}, `This PC and ${req.Other} both have settings for ${req.Files.length} file(s).`),
+    h("div", { class: "actions" },
+      h("button", { onclick: () => { call("AnswerConflicts", null, true); close(); } }, "Cancel"),
+      h("button", { onclick: perFile }, "Choose per file…"),
+      h("button", { onclick: () => answer(all("local")) }, "Keep this PC's"),
+      h("button", { class: "primary", onclick: () => answer(all("remote")) }, `Use ${req.Other}'s for all`)),
+  );
+} else {
+  perFile();
+}
+</script></body></html>

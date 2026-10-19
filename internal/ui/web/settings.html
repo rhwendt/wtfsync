@@ -1,0 +1,35 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><link rel="stylesheet" href="app.css"><title>Settings</title></head>
+<body><h1>Settings</h1><div id="main"></div><div id="msg"></div>
+<script type="module">
+import { call, close, h, show, busy, folderPicker, errorText, $ } from "./app.js";
+
+let s;
+try { s = await call("Settings"); } catch (e) { show(h("p", { class: "error" }, errorText(e))); throw e; }
+const d = await call("Defaults");
+const name = h("input", { type: "text", value: s.Name });
+const wow = folderPicker(d.Installs, s.WoWDir, "Your World of Warcraft folder");
+const cloud = folderPicker(d.Clouds, s.SyncFolder, "A folder your cloud client syncs");
+const toggles = s.Flavors.map((f) => ({ f, box: h("input", { type: "checkbox", checked: f.On }) }));
+const login = h("input", { type: "checkbox", id: "login", checked: s.StartAtLogin });
+
+const save = h("button", { class: "primary", onclick: () => busy(save, async () => {
+  const lines = await call("SaveSettings", {
+    Name: name.value, WoWDir: wow.value(), SyncFolder: cloud.value(), StartAtLogin: login.checked,
+    Flavors: toggles.map((t) => ({ Name: t.f.Name, On: t.box.checked })),
+  });
+  $("#msg").className = "";
+  $("#msg").textContent = lines.join("\n") || "Saved.";
+}) }, "Save");
+
+show(
+  h("label", {}, "Name for this PC"), h("div", { class: "row" }, name),
+  h("label", {}, "World of Warcraft folder"), wow.el,
+  h("label", {}, "Cloud folder"), cloud.el,
+  h("p", { class: "muted" }, "Changing a folder clears this PC's sync history: the next sync asks once which settings to use."),
+  h("label", {}, "Flavors to sync"),
+  toggles.map((t) => h("div", {}, t.box, " ", t.f.Name)),
+  h("label", {}, "Startup"), h("div", {}, login, h("label", { for: "login", style: "display:inline;font-weight:normal" }, " Start wtfsync when Windows starts")),
+  h("div", { class: "actions" }, h("button", { onclick: close }, "Close"), save),
+);
+</script></body></html>
