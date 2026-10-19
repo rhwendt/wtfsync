@@ -130,3 +130,19 @@ func TestUnknownCommandAndNoArgs(t *testing.T) {
 		contains(t, out, "usage: wtfsync")
 	}
 }
+
+func TestTypedFolderMayBeQuoted(t *testing.T) {
+	// Explorer's "Copy as path" wraps the path in double quotes; people paste it as is.
+	for _, quote := range []string{`"`, `'`} {
+		nj, _ := newPair(t)
+		stdin := quote + nj.wowDir + quote + "\n"
+		code, out := nj.run(stdin, "init", "--sync-dir", nj.sync, "--name", "NJ")
+		if code != 0 {
+			t.Fatalf("quote %s: exit %d\n%s", quote, code, out)
+		}
+		s, _ := local.Store{Dir: nj.dataDir}.LoadSettings()
+		if s.WoWDir != nj.wowDir {
+			t.Fatalf("quote %s: wowDir = %q", quote, s.WoWDir)
+		}
+	}
+}

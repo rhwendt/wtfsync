@@ -26,7 +26,8 @@ func (p prompter) ask(q string) (string, error) {
 	return strings.TrimSpace(line), nil
 }
 
-// line asks for a value, using def when the answer is empty.
+// line asks for a value, using def when the answer is empty. One pair of surrounding quotes is
+// dropped, since Explorer's "Copy as path" adds them and cmd would have removed them from a flag.
 func (p prompter) line(q, def string) (string, error) {
 	if def != "" {
 		q = fmt.Sprintf("%s [%s]: ", q, def)
@@ -37,6 +38,7 @@ func (p prompter) line(q, def string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	a = unquote(a)
 	if a == "" {
 		a = def
 	}
@@ -93,4 +95,11 @@ func (p prompter) Conflict(path, other string) (engine.Choice, error) {
 		}
 		fmt.Fprintln(p.out, "Please answer r, l or a.")
 	}
+}
+
+func unquote(s string) string {
+	if len(s) >= 2 && (s[0] == '"' || s[0] == '\'') && s[len(s)-1] == s[0] {
+		return strings.TrimSpace(s[1 : len(s)-1])
+	}
+	return s
 }
