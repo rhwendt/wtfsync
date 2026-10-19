@@ -46,6 +46,30 @@ ${UnStrRep}
 !insertmacro MUI_UNPAGE_INSTFILES
 !insertmacro MUI_LANGUAGE "English"
 
+; Reads the user PATH into $0. $R7 is "ok", or "toolong" when PATH (plus our entry) doesn't fit
+; in NSIS's ${NSIS_MAX_STRLEN}-character strings: ReadRegStr then returns "" or the edit would be
+; cut short, and writing either back would wipe the user's other PATH entries. A missing PATH
+; value also returns "", so `reg query` tells "missing" from "too long".
+!macro ReadUserPath
+  StrCpy $R7 ok
+  ClearErrors
+  ReadRegStr $0 HKCU "Environment" "Path"
+  ${If} ${Errors}
+    nsExec::Exec 'reg query HKCU\Environment /v Path'
+    Pop $R8
+    ${If} $R8 == 0
+      StrCpy $R7 toolong
+    ${EndIf}
+  ${EndIf}
+  StrLen $R8 $0
+  StrLen $R6 $INSTDIR
+  IntOp $R8 $R8 + $R6
+  IntOp $R8 $R8 + 2 ; the ";" separators
+  ${If} $R8 >= ${NSIS_MAX_STRLEN}
+    StrCpy $R7 toolong
+  ${EndIf}
+!macroend
+
 ; Ask the running tray to quit, then wait up to 10 s; force it after that.
 !macro StopTray
   IfFileExists "$INSTDIR\wtfsync-tray.exe" 0 +2
@@ -103,9 +127,13 @@ Section "-apply"
     DeleteRegValue HKCU "${RUNKEY}" "wtfsync"
   ${EndIf}
 
-  ReadRegStr $0 HKCU "Environment" "Path"
+  !insertmacro ReadUserPath
   ${StrStr} $1 "$0;" "$INSTDIR;"
-  ${If} ${SectionIsSelected} ${SecPath}
+  ${If} $R7 == toolong
+    ${If} ${SectionIsSelected} ${SecPath}
+      MessageBox MB_ICONEXCLAMATION|MB_OK "Your PATH is too long for the installer to change safely, so it was left alone. To use the wtfsync command, add this folder to PATH yourself:$\r$\n$INSTDIR" /SD IDOK
+    ${EndIf}
+  ${ElseIf} ${SectionIsSelected} ${SecPath}
     ${If} $1 == ""
       ${If} $0 == ""
         WriteRegExpandStr HKCU "Environment" "Path" "$INSTDIR"
@@ -133,9 +161,11 @@ Function .onInit
     ${If} $1 == ""
       !insertmacro UnselectSection ${SecAutostart}
     ${EndIf}
-    ReadRegStr $1 HKCU "Environment" "Path"
-    ${StrStr} $2 "$1;" "$0;"
-    ${If} $2 == ""
+    StrCpy $3 $0
+    !insertmacro ReadUserPath ; PATH → $0
+    ${StrStr} $2 "$0;" "$3;"
+    ${If} $R7 == ok
+    ${AndIf} $2 == ""
       !insertmacro UnselectSection ${SecPath}
     ${EndIf}
   ${EndIf}
@@ -151,9 +181,11 @@ Section "Uninstall"
   RMDir "$INSTDIR"
   Delete "$SMPROGRAMS\wtfsync.lnk"
   DeleteRegValue HKCU "${RUNKEY}" "wtfsync"
-  ReadRegStr $0 HKCU "Environment" "Path"
+  !insertmacro ReadUserPath
   ${UnStrStr} $1 "$0;" "$INSTDIR;"
-  ${If} $1 != ""
+  ${If} $R7 == toolong
+    DetailPrint "PATH is too long to edit safely; remove $INSTDIR from it yourself."
+  ${ElseIf} $1 != ""
     ${UnStrRep} $0 "$0;" "$INSTDIR;" ""
     StrCpy $0 $0 -1
     WriteRegExpandStr HKCU "Environment" "Path" "$0"
