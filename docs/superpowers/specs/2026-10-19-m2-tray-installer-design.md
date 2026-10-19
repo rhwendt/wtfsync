@@ -113,8 +113,8 @@ running one to exit (used by the installer).
 - Start menu shortcut **wtfsync** → `wtfsync-tray.exe`.
 - Options page, both on by default: **Start wtfsync when Windows starts** (HKCU Run value, the
   same one the tray's setting writes) and **Add the wtfsync command to PATH** (user PATH).
-- Before copying: `wtfsync-tray.exe --quit`, wait up to 10 s. After install: start the tray
-  (unless `/S` was given *and* `/norun`; silent updates do restart it).
+- Before copying: `wtfsync-tray.exe --quit`, wait up to 10 s. After install (silent or not):
+  start the tray.
 - Uninstall entry under HKCU `…\Uninstall\wtfsync` with version, publisher "wtfsync", size.
   Uninstall removes program files, shortcut, Run value and PATH entry; **keeps**
   `%APPDATA%\wtfsync` (settings, state, backups) and the cloud data.
