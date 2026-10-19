@@ -43,6 +43,8 @@ commands:
   status    show sync state for each flavor
   restore   undo the last pull from its backup (--set <id> for an older one)
 
+Run init or link again to change this PC's WoW folder, sync folder or name.
+
 flags:
   --flavor <name>     only this flavor (default: all enabled)
   --dry-run           show what would change; change nothing

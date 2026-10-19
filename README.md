@@ -26,6 +26,10 @@ On each other PC (point it at the same cloud folder):
 
     wtfsync link
 
+To change a PC's WoW folder, cloud folder or name later, run `init` (or `link`) again: your
+current answers are the defaults and the PC keeps its identity. Pointing it at a different folder
+makes the next sync ask once which settings to use, like a first link.
+
 ## Use
 
 Close WoW, then:

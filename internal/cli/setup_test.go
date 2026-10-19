@@ -5,8 +5,10 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/rhwendt/wtfsync/internal/local"
+	"github.com/rhwendt/wtfsync/internal/syncdir"
 )
 
 func TestInitCreatesSyncDataAndPushes(t *testing.T) {
@@ -33,14 +35,73 @@ func TestInitRefusesFolderWithData(t *testing.T) {
 	contains(t, out, "wtfsync link")
 }
 
-func TestInitTwiceOnSamePC(t *testing.T) {
+func TestRerunSetupKeepsIdentityAndUpdatesName(t *testing.T) {
 	nj, _ := newPair(t)
 	nj.initCmd()
-	code, out := nj.run("", "init", "--wow-dir", nj.wowDir, "--sync-dir", nj.sync, "--name", "NJ")
-	if code != 1 {
-		t.Fatalf("exit %d", code)
+	store := local.Store{Dir: nj.dataDir}
+	before, _ := store.LoadSettings()
+	stBefore, _ := store.LoadState("retail")
+
+	// Enter keeps the WoW folder and sync folder; a new name is typed.
+	code, out := nj.run("\n\nNJ desk\n", "init")
+	if code != 0 {
+		t.Fatalf("exit %d\n%s", code, out)
 	}
-	contains(t, out, "already set up")
+	contains(t, out, "WoW install folder ["+nj.wowDir+"]")
+	contains(t, out, "["+nj.sync+"]")
+	contains(t, out, "Name for this PC [NJ]")
+	after, _ := store.LoadSettings()
+	if after.MachineUUID != before.MachineUUID || after.MachineName != "NJ desk" || after.SyncFolder != nj.sync || after.WoWDir != nj.wowDir {
+		t.Fatalf("before %+v\nafter %+v", before, after)
+	}
+	if st, _ := store.LoadState("retail"); st.Base != stBefore.Base {
+		t.Fatalf("sync history changed: %q -> %q", stBefore.Base, st.Base)
+	}
+	d, err := syncdir.Open(nj.sync, syncdir.TimeoutHydrator{Timeout: time.Second})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m, _ := d.Machine(after.MachineUUID); m.Name != "NJ desk" {
+		t.Fatalf("machine record name = %q", m.Name)
+	}
+}
+
+func TestRerunSetupWithNewSyncFolderStartsFresh(t *testing.T) {
+	nj, _ := newPair(t)
+	nj.write(svA, "a")
+	nj.initCmd()
+	before, _ := local.Store{Dir: nj.dataDir}.LoadSettings()
+	moved := t.TempDir()
+	code, out := nj.run("", "init", "--sync-dir", moved, "--wow-dir", nj.wowDir, "--name", "NJ")
+	if code != 0 {
+		t.Fatalf("exit %d\n%s", code, out)
+	}
+	contains(t, out, "retail: pushed 000001_") // the new folder starts its own history
+	after, _ := local.Store{Dir: nj.dataDir}.LoadSettings()
+	if after.MachineUUID != before.MachineUUID || after.SyncFolder != moved {
+		t.Fatalf("after %+v", after)
+	}
+}
+
+func TestRerunLinkWithNewWoWFolderAsksLikeAFirstLink(t *testing.T) {
+	_, ny := linkedPair(t, map[string]string{svA: "a"})
+	other := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(other, "_retail_", "WTF", filepath.Dir(filepath.FromSlash(svA))), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(other, "_retail_", "WTF", filepath.FromSlash(svA)), []byte("a-other"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// "2" = keep this PC's files for every conflict.
+	code, out := ny.run("2\n", "link", "--wow-dir", other, "--sync-dir", ny.sync, "--name", "NY")
+	if code != 0 {
+		t.Fatalf("exit %d\n%s", code, out)
+	}
+	contains(t, out, "both have settings") // the first-link question, not a silent overwrite
+	b, _ := os.ReadFile(filepath.Join(other, "_retail_", "WTF", filepath.FromSlash(svA)))
+	if string(b) != "a-other" {
+		t.Fatalf("new install's file = %q", b)
+	}
 }
 
 func TestLinkNeedsInitializedFolder(t *testing.T) {
