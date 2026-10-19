@@ -15,6 +15,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -45,7 +46,7 @@ type UI struct {
 	app    *app.App
 	wails  *application.App
 	tray   *application.SystemTray
-	notes  *notifications.NotificationService
+	notes  *notes
 	prompt *prompter
 }
 
@@ -57,7 +58,7 @@ func Run(d app.Deps, o Options) error {
 	u.prompt = &prompter{open: u.open}
 	d.Prompt, d.Notify, d.Changed, d.Log = u.prompt, u.notify, u.render, o.Log
 	u.app = app.New(d)
-	u.notes = notifications.New()
+	u.notes = &notes{NotificationService: notifications.New(), log: o.Log}
 	web, err := fs.Sub(webFiles, "web")
 	if err != nil {
 		return err
@@ -178,7 +179,29 @@ func (u *UI) quit() {
 	u.wails.Quit()
 }
 
+// notes is Wails' notifications service, except that a failed startup (registering the app for
+// toasts under HKCU) is logged instead of stopping the tray; notifications are then skipped.
+type notes struct {
+	*notifications.NotificationService
+	log *log.Logger
+	ok  atomic.Bool
+}
+
+func (n *notes) ServiceStartup(ctx context.Context, o application.ServiceOptions) error {
+	if err := n.NotificationService.ServiceStartup(ctx, o); err != nil {
+		if n.log != nil {
+			n.log.Printf("notifications off: %v", err)
+		}
+		return nil
+	}
+	n.ok.Store(true)
+	return nil
+}
+
 func (u *UI) notify(n app.Notice) {
+	if !u.notes.ok.Load() {
+		return // startup failed and was logged
+	}
 	opts := notifications.NotificationOptions{ID: n.ID, Title: n.Title, Body: n.Body, CategoryID: n.Action}
 	var err error
 	if n.Action != "" {
