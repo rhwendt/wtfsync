@@ -49,6 +49,9 @@ bumps the patch number, `feat` the minor, and a breaking change (`feat!:` or a `
 footer) the major (the minor while still 0.x). Merges with only `docs:`, `chore:`, `ci:`, `test:` or
 `refactor:` commits don't release.
 
+Each release's notes are the changelog: its features, fixes and breaking changes, grouped from the
+commit messages, with the PR each came from. See [all releases](https://github.com/rhwendt/wtfsync/releases).
+
 ## Build
 
     GOOS=windows GOARCH=amd64 go build -o wtfsync.exe ./cmd/wtfsync
