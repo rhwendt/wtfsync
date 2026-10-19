@@ -41,7 +41,7 @@ type WizardDefaults struct {
 
 func (b *Bridge) Defaults() WizardDefaults {
 	o := b.u.opts
-	d := WizardDefaults{Installs: setup.FindInstalls(o.InstallDirs), Clouds: syncdir.Candidates(o.Getenv, fsutil.IsDir)}
+	d := WizardDefaults{Installs: list(setup.FindInstalls(o.InstallDirs)), Clouds: list(syncdir.Candidates(o.Getenv, fsutil.IsDir))}
 	if s, ok, _ := b.u.app.Settings(); ok {
 		d.WoWDir, d.Sync, d.Name, d.Rerun = s.WoWDir, s.SyncFolder, s.MachineName, true
 	} else {
@@ -122,7 +122,7 @@ func (b *Bridge) Settings() (SettingsForm, error) {
 	if err != nil || !ok {
 		return SettingsForm{}, cmp.Or(err, errors.New("this PC isn't set up yet"))
 	}
-	f := SettingsForm{Name: s.MachineName, WoWDir: s.WoWDir, SyncFolder: s.SyncFolder, StartAtLogin: b.u.app.StartsAtLogin()}
+	f := SettingsForm{Name: s.MachineName, WoWDir: s.WoWDir, SyncFolder: s.SyncFolder, StartAtLogin: b.u.app.StartsAtLogin(), Flavors: []FlavorToggle{}}
 	flavors, _ := setup.Flavors(s.WoWDir)
 	for _, fl := range flavors {
 		on, listed := s.Flavors[fl.Name]
@@ -155,10 +155,10 @@ type RestoreInfo struct {
 }
 
 func (b *Bridge) RestoreInfo() []RestoreInfo {
-	var out []RestoreInfo
+	out := []RestoreInfo{}
 	for _, f := range b.u.app.View().Flavors {
 		r, err := b.u.app.RestorePreview(f.Name)
-		info := RestoreInfo{Flavor: f.Name, Paths: r.Paths}
+		info := RestoreInfo{Flavor: f.Name, Paths: list(r.Paths)}
 		if err != nil {
 			info.Err = err.Error()
 		}

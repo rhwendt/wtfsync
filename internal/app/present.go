@@ -17,7 +17,7 @@ type StatusRow struct {
 }
 
 func StatusRows(v View) []StatusRow {
-	var rows []StatusRow
+	rows := []StatusRow{}
 	for _, f := range v.Flavors {
 		s := f.Status
 		r := StatusRow{Flavor: f.Name, State: "in sync", Base: s.Base, Newest: "none", Local: fmt.Sprintf("%d local change(s)", s.LocalChanges)}
@@ -45,7 +45,7 @@ type AddonRow struct {
 }
 
 func AddonRows(v View) []AddonRow {
-	var rows []AddonRow
+	rows := []AddonRow{}
 	for _, f := range v.Flavors {
 		for _, o := range f.Status.MissingAddons {
 			for _, m := range o.Addons {
@@ -58,7 +58,7 @@ func AddonRows(v View) []AddonRow {
 
 // ResultLines describes a setup run for the wizard's last page.
 func ResultLines(r setup.Result) []string {
-	var lines []string
+	lines := []string{}
 	if r.Rerun && !r.Moved {
 		lines = append(lines, "Settings saved; sync history kept.")
 	}

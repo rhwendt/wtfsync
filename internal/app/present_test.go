@@ -1,6 +1,7 @@
 package app
 
 import (
+	"encoding/json"
 	"errors"
 	"reflect"
 	"testing"
@@ -47,5 +48,18 @@ func TestResultLines(t *testing.T) {
 	}
 	if got := ResultLines(setup.Result{Rerun: true}); !reflect.DeepEqual(got, []string{"Settings saved; sync history kept."}) {
 		t.Fatalf("rerun: %q", got)
+	}
+}
+
+// The pages loop over these; JSON null (a nil slice) would throw and leave the window blank.
+func TestEmptyRowsAreEmptyLists(t *testing.T) {
+	for name, v := range map[string]any{
+		"StatusRows":  StatusRows(View{}),
+		"AddonRows":   AddonRows(View{}),
+		"ResultLines": ResultLines(setup.Result{}),
+	} {
+		if b, _ := json.Marshal(v); string(b) != "[]" {
+			t.Errorf("%s = %s, want []", name, b)
+		}
 	}
 }
