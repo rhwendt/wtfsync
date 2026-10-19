@@ -14,7 +14,9 @@ type Processes interface {
 // ProcessChecker matches running executables against a flavor's folder, so flavors that share an
 // executable name (classic and classic_era both run WowClassic.exe) are told apart by path.
 type ProcessChecker struct {
-	List func() ([]string, error) // full executable paths of running processes
+	// Full executable paths of running processes. A bare file name means the path couldn't be
+	// read; a game executable listed that way counts as running for every flavor (fail closed).
+	List func() ([]string, error)
 }
 
 func (c ProcessChecker) Running(f Flavor) (bool, error) {
@@ -26,7 +28,8 @@ func (c ProcessChecker) Running(f Flavor) (bool, error) {
 	for _, p := range paths {
 		lp := strings.ToLower(filepath.Clean(p))
 		base := filepath.Base(lp)
-		if strings.HasPrefix(lp, dir) && strings.HasPrefix(base, "wow") && strings.HasSuffix(base, ".exe") {
+		game := strings.HasPrefix(base, "wow") && strings.HasSuffix(base, ".exe")
+		if game && (strings.HasPrefix(lp, dir) || base == lp) {
 			return true, nil
 		}
 	}

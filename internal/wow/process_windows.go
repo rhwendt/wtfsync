@@ -9,7 +9,8 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-// systemProcesses returns the full executable path of every process we're allowed to query.
+// systemProcesses returns the full executable path of every process, or just its file name when
+// the path can't be queried.
 func systemProcesses() ([]string, error) {
 	snap, err := windows.CreateToolhelp32Snapshot(windows.TH32CS_SNAPPROCESS, 0)
 	if err != nil {
@@ -21,9 +22,11 @@ func systemProcesses() ([]string, error) {
 	e.Size = uint32(unsafe.Sizeof(e))
 	var paths []string
 	for err = windows.Process32First(snap, &e); err == nil; err = windows.Process32Next(snap, &e) {
-		if p, ok := imagePath(e.ProcessID); ok {
-			paths = append(paths, p)
+		p, ok := imagePath(e.ProcessID)
+		if !ok {
+			p = windows.UTF16ToString(e.ExeFile[:])
 		}
+		paths = append(paths, p)
 	}
 	if !errors.Is(err, windows.ERROR_NO_MORE_FILES) {
 		return nil, err
@@ -34,7 +37,7 @@ func systemProcesses() ([]string, error) {
 func imagePath(pid uint32) (string, bool) {
 	h, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION, false, pid)
 	if err != nil {
-		return "", false // system/protected processes; never WoW
+		return "", false // system/protected processes
 	}
 	defer windows.CloseHandle(h)
 	buf := make([]uint16, windows.MAX_LONG_PATH)

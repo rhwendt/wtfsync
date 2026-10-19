@@ -25,6 +25,8 @@ func TestProcessCheckerMatchesByFlavorFolder(t *testing.T) {
 		{"era running", []string{filepath.Join(root, "_classic_era_", "WowClassic.exe")}, era, true},
 		{"non-game exe in folder", []string{filepath.Join(root, "_retail_", "Utils", "Helper.exe")}, retail, false},
 		{"nothing running", nil, retail, false},
+		{"game with unknown path blocks every flavor", []string{"WowClassic.exe"}, retail, true},
+		{"other exe with unknown path", []string{"Battle.net.exe"}, retail, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
