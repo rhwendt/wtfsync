@@ -3,6 +3,7 @@ package cli
 
 import (
 	"bufio"
+	"cmp"
 	"errors"
 	"flag"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/rhwendt/wtfsync/internal/engine"
 	"github.com/rhwendt/wtfsync/internal/local"
+	"github.com/rhwendt/wtfsync/internal/lock"
 	"github.com/rhwendt/wtfsync/internal/syncdir"
 	"github.com/rhwendt/wtfsync/internal/wow"
 )
@@ -24,12 +26,13 @@ type Deps struct {
 	Getenv         func(string) string
 	DefaultDataDir string   // %APPDATA%\wtfsync
 	InstallDirs    []string // likely WoW install roots, most likely first
+	Version        string   // set at build time; "dev" otherwise
 }
 
 const (
 	exitOK      = 0
 	exitErr     = 1
-	exitRefused = 2 // game running, or snapshot not downloaded yet
+	exitRefused = 2 // game running, snapshot not downloaded yet, or another sync running
 	exitAborted = 3 // a conflict prompt was aborted
 )
 
@@ -42,6 +45,7 @@ commands:
   pull      download the newest addon settings from your other PCs
   status    show sync state for each flavor
   restore   undo the last pull from its backup (--set <id> for an older one)
+  version   print wtfsync's version
 
 Run init or link again to change this PC's WoW folder, sync folder or name.
 
@@ -77,6 +81,9 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer, deps Deps) in
 		err = c.setup(args[1:], false)
 	case "push", "pull", "status", "restore":
 		err = c.sync(args[0], args[1:])
+	case "version", "--version":
+		fmt.Fprintln(stdout, "wtfsync", cmp.Or(deps.Version, "dev"))
+		return exitOK
 	case "help", "-h", "--help":
 		fmt.Fprint(stdout, usage)
 		return exitOK
@@ -95,7 +102,7 @@ func exitCode(err error) int {
 		return exitOK
 	case errors.Is(err, engine.ErrAborted):
 		return exitAborted
-	case errors.Is(err, engine.ErrGameRunning), errors.Is(err, syncdir.ErrNotHydrated):
+	case errors.Is(err, engine.ErrGameRunning), errors.Is(err, syncdir.ErrNotHydrated), errors.Is(err, lock.ErrHeld):
 		return exitRefused
 	default:
 		return exitErr

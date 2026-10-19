@@ -45,7 +45,16 @@ Add `--dry-run` to any command to see what it would do without changing anything
 
 ## Download
 
-Grab `wtfsync.exe` from the latest [release](https://github.com/rhwendt/wtfsync/releases/latest).
+Run `wtfsync-setup.exe` from the latest [release](https://github.com/rhwendt/wtfsync/releases/latest).
+It installs for your Windows user only (no admin prompt) into `%LOCALAPPDATA%\Programs\wtfsync`,
+adds a Start menu entry, and can start wtfsync with Windows and add the `wtfsync` command to PATH.
+It isn't code-signed yet, so Windows SmartScreen asks once: **More info → Run anyway**. wtfsync's
+windows use Microsoft Edge WebView2, which Windows 10 and 11 already include.
+
+The tray app checks for new releases once a day and offers **Update to vX.Y.Z** in its menu.
+Uninstalling (Settings → Apps) keeps your settings and backups in `%APPDATA%\wtfsync`.
+
+The release also has `wtfsync.exe` on its own, for using just the command line.
 
 Releases are automatic: every merge to `main` that includes a `feat:`, `fix:`, `perf:` or breaking
 change ([Conventional Commits](https://www.conventionalcommits.org/)) publishes a new version. `fix`
@@ -56,11 +65,29 @@ footer) the major (the minor while still 0.x). Merges with only `docs:`, `chore:
 Each release's notes are the changelog: its features, fixes and breaking changes, grouped from the
 commit messages, with the PR each came from. See [all releases](https://github.com/rhwendt/wtfsync/releases).
 
+## Tray app
+
+`wtfsync-tray.exe` (the Start menu entry) puts an icon in the notification area:
+
+| Icon | Means |
+|---|---|
+| green | every flavor is in sync |
+| amber | another PC pushed newer settings (a notification offers **Pull**) |
+| red | needs you: an error, a refused sync (close WoW first), a push waiting for the cloud folder, or missing addons |
+| blue | syncing |
+
+Its menu has Push, Pull, Status, Restore last backup, Missing addons, Settings and Update. A
+conflict (the same addon changed on both PCs) opens a window to choose which version to keep;
+Cancel changes nothing. The tray and the `wtfsync` command never sync at the same time: whichever
+starts second says "a sync is already running". The tray logs to `%APPDATA%\wtfsync\tray.log`.
+
 ## Build
 
-    GOOS=windows GOARCH=amd64 go build -o wtfsync.exe ./cmd/wtfsync
+    .github/scripts/build.sh dev    # needs makensis (apt install nsis)
 
-CI builds `wtfsync.exe` for every PR (artifact `wtfsync-windows-amd64`).
+builds `dist/wtfsync.exe`, `dist/wtfsync-tray.exe`, `dist/wtfsync-setup.exe` and
+`dist/checksums.txt`. CI does the same for every PR (artifact `wtfsync-windows-amd64`).
+`wtfsync version` prints the version a build was made with.
 
 ## Manual test checklist (real PCs)
 
@@ -68,3 +95,11 @@ CI builds `wtfsync.exe` for every PR (artifact `wtfsync-windows-amd64`).
 2. `push` / `pull` with `--wow-dir` pointed at a *copy* of the install.
 3. NJ ↔ NY through Google Drive for Desktop (including streaming/placeholder mode).
 4. Change the same addon on both PCs without syncing: the second push asks.
+5. Install `wtfsync-setup.exe`: Start menu entry, tray icon, the wizard on a PC that isn't set up.
+6. Push on one PC → a notification on the other within a minute → **Pull** from it.
+7. Same-file conflict → the conflict window; Cancel leaves files as they were.
+8. WoW running → Pull is refused with "Close WoW (flavor) first".
+9. Tray syncing while `wtfsync pull` runs in cmd → "a sync is already running".
+10. Settings: rename the PC, toggle a flavor, start at login (check after a reboot).
+11. Update from one release to the next from the tray menu; the tray comes back on its own.
+12. Uninstall: programs, shortcut and startup entry gone; `%APPDATA%\wtfsync` still there.

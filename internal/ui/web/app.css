@@ -1,0 +1,17 @@
+:root { color-scheme: light dark; --accent: #2f7fd8; --muted: #888; --bad: #d63b3b; }
+body { font: 14px/1.45 "Segoe UI", system-ui, sans-serif; margin: 0; padding: 20px 24px; }
+h1 { font-size: 18px; margin: 0 0 12px; }
+label { display: block; margin: 14px 0 4px; font-weight: 600; }
+.row { display: flex; gap: 8px; }
+select, input[type=text] { flex: 1; padding: 5px; font: inherit; min-width: 0; }
+button { font: inherit; padding: 5px 14px; }
+button.primary { background: var(--accent); color: white; border: 1px solid var(--accent); border-radius: 4px; }
+.actions { margin-top: 20px; display: flex; gap: 8px; justify-content: flex-end; }
+.muted { color: var(--muted); }
+.error { color: var(--bad); }
+#msg { margin-top: 12px; white-space: pre-wrap; }
+table { border-collapse: collapse; width: 100%; }
+td, th { text-align: left; padding: 4px 8px 4px 0; vertical-align: top; }
+th { font-weight: 600; }
+code { font-size: 12px; word-break: break-all; }
+ul.lines { padding-left: 18px; }

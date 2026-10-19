@@ -1,0 +1,37 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><link rel="stylesheet" href="app.css"><title>Set up wtfsync</title></head>
+<body><h1>Set up wtfsync</h1><div id="main"></div><div id="msg"></div>
+<script type="module">
+import { call, close, h, show, busy, folderPicker } from "./app.js";
+
+const d = await call("Defaults");
+const wow = folderPicker(d.Installs, d.WoWDir, "Your World of Warcraft folder");
+const cloud = folderPicker(d.Clouds, d.Sync, "A folder your cloud client syncs");
+const name = h("input", { type: "text", value: d.Name });
+const first = h("input", { type: "radio", name: "mode", id: "first" });
+const join = h("input", { type: "radio", name: "mode", id: "join" });
+
+// Suggest joining when the chosen cloud folder already has wtfsync data.
+async function suggest() {
+  const has = await call("HasSyncData", cloud.value());
+  (has ? join : first).checked = true;
+}
+cloud.select.addEventListener("change", suggest);
+await suggest();
+
+const go = h("button", { class: "primary", onclick: () => busy(go, async () => {
+  const lines = await call("Setup", { WoWDir: wow.value(), SyncFolder: cloud.value(), Name: name.value, First: first.checked });
+  show(h("p", {}, d.Rerun ? "Saved." : "This PC is set up."), h("ul", { class: "lines" }, lines.map((l) => h("li", {}, l))),
+    h("div", { class: "actions" }, h("button", { class: "primary", onclick: close }, "Done")));
+}) }, d.Rerun ? "Save" : "Set up");
+
+show(
+  h("label", {}, "World of Warcraft folder"), wow.el,
+  h("label", {}, "Cloud folder (Google Drive, OneDrive, Dropbox…)"), cloud.el,
+  h("label", {}, "Name for this PC"), h("div", { class: "row" }, name),
+  h("label", {}, "This PC is…"),
+  h("div", {}, first, h("label", { for: "first", style: "display:inline;font-weight:normal" }, " my first PC (upload its settings)")),
+  h("div", {}, join, h("label", { for: "join", style: "display:inline;font-weight:normal" }, " joining my other PC (download its settings)")),
+  h("div", { class: "actions" }, h("button", { onclick: close }, "Cancel"), go),
+);
+</script></body></html>

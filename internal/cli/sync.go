@@ -8,6 +8,7 @@ import (
 
 	"github.com/rhwendt/wtfsync/internal/engine"
 	"github.com/rhwendt/wtfsync/internal/local"
+	"github.com/rhwendt/wtfsync/internal/lock"
 	"github.com/rhwendt/wtfsync/internal/wow"
 )
 
@@ -33,8 +34,19 @@ func (c *cmd) sync(op string, args []string) error {
 		return err
 	}
 	eng := c.engine(store, s)
-	if (op == "pull" || op == "status") && !fl.dryRun {
-		c.retryPending(eng, flavors)
+	if !fl.dryRun {
+		// One sync at a time per PC (CLI or tray). status only needs the lock for its retry,
+		// so a busy tray doesn't stop it from showing where things stand.
+		l, err := lock.Acquire(fl.dataDir)
+		switch {
+		case err == nil:
+			defer l.Release()
+			if op == "pull" || op == "status" {
+				c.retryPending(eng, flavors)
+			}
+		case op != "status":
+			return err
+		}
 	}
 	opt := engine.Options{DryRun: fl.dryRun}
 	var errs []error

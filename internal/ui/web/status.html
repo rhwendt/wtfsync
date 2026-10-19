@@ -1,0 +1,18 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><link rel="stylesheet" href="app.css"><title>Status</title></head>
+<body><h1>Status</h1><div id="main"></div><div id="msg"></div>
+<script type="module">
+import { call, close, h, show } from "./app.js";
+
+async function render() {
+  const p = await call("Status");
+  show(
+    p.Rows.length === 0 ? h("p", { class: "muted" }, "No flavors are being synced.") :
+    h("table", {}, h("tr", {}, ["Flavor", "State", "Last synced", "Newest", "Here"].map((t) => h("th", {}, t))),
+      p.Rows.map((r) => h("tr", {}, h("td", {}, r.Flavor), h("td", {}, r.State), h("td", {}, h("code", {}, r.Base)), h("td", {}, h("code", {}, r.Newest)), h("td", {}, r.Local)))),
+    h("p", { class: "muted" }, `wtfsync ${p.Version}`),
+    h("div", { class: "actions" }, h("button", { onclick: render }, "Refresh"), h("button", { class: "primary", onclick: close }, "Close")),
+  );
+}
+await render();
+</script></body></html>
