@@ -7,9 +7,7 @@ package ui
 
 import (
 	"context"
-	"embed"
 	"fmt"
-	"io/fs"
 	"log"
 	"os"
 	"os/exec"
@@ -27,9 +25,6 @@ import (
 	"github.com/rhwendt/wtfsync/internal/app"
 	"github.com/rhwendt/wtfsync/internal/icons"
 )
-
-//go:embed web
-var webFiles embed.FS
 
 // Options are what the windows need beyond app.Deps.
 type Options struct {
@@ -59,7 +54,7 @@ func Run(d app.Deps, o Options) error {
 	d.Prompt, d.Notify, d.Changed, d.Log = u.prompt, u.notify, u.render, o.Log
 	u.app = app.New(d)
 	u.notes = &notes{NotificationService: notifications.New(), log: o.Log}
-	web, err := fs.Sub(webFiles, "web")
+	web, err := assets()
 	if err != nil {
 		return err
 	}
