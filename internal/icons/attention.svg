@@ -1,0 +1,9 @@
+<!-- wtfsync tray icon: needs you (red, exclamation mark). Paths only: the renderer (oksvg) mis-draws <polyline> and needs ry beside rx. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <rect width="64" height="64" rx="12" ry="12" fill="#1e2530"/>
+  <path fill="none" stroke="#fff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"
+        d="M5 7 L10.5 28 L16 17.5 L21.5 28 L27 7 M31 7 H43 M37 7 V28 M58 7 H49 V28 M49 17.5 H56"/>
+  <rect x="4" y="35" width="56" height="25" rx="10" ry="10" fill="#d63b3b"/>
+  <path fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" d="M32 39.5 V49.5"/>
+  <circle fill="#fff" cx="32" cy="55.5" r="3"/>
+</svg>
