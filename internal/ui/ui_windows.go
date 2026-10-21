@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -23,6 +24,7 @@ import (
 	"golang.org/x/sys/windows"
 
 	"github.com/rhwendt/wtfsync/internal/app"
+	"github.com/rhwendt/wtfsync/internal/diag"
 	"github.com/rhwendt/wtfsync/internal/icons"
 )
 
@@ -32,6 +34,7 @@ type Options struct {
 	Getenv      func(string) string    // for cloud folder detection
 	Hostname    func() (string, error) // default PC name
 	Log         *log.Logger
+	LogDir      string // holds tray.log and crash.log; the menu's Open log folder opens it
 }
 
 const uniqueID = "wtfsync-tray-6f2b7c1e"
@@ -68,6 +71,12 @@ func Run(d app.Deps, o Options) error {
 			OnSecondInstanceLaunch: u.secondInstance,
 		},
 		Windows: application.WindowsOptions{DisableQuitOnLastWindowClosed: true}, // the tray keeps running
+		// Wails' own warnings and errors (e.g. a page it can't serve) go to tray.log too.
+		Logger:   slog.New(slog.NewTextHandler(o.Log.Writer(), &slog.HandlerOptions{Level: slog.LevelWarn})),
+		LogLevel: slog.LevelWarn,
+		PanicHandler: func(p *application.PanicDetails) {
+			o.Log.Printf("panic: %v\n%s", p.Error, p.FullStackTrace)
+		},
 	})
 	if slices.Contains(os.Args[1:], "--quit") {
 		return nil // no other tray was running
@@ -96,9 +105,12 @@ func (u *UI) loop(ctx context.Context) {
 		u.open("wizard")
 	}
 	u.app.CheckUpdate(ctx)
-	tick, daily := time.NewTicker(time.Minute), time.NewTicker(24*time.Hour)
+	var h diag.Health
+	u.logHealth(&h)
+	tick, daily, health := time.NewTicker(time.Minute), time.NewTicker(24*time.Hour), time.NewTicker(10*time.Minute)
 	defer tick.Stop()
 	defer daily.Stop()
+	defer health.Stop()
 	for {
 		select {
 		case <-ctx.Done():
@@ -107,6 +119,8 @@ func (u *UI) loop(ctx context.Context) {
 			u.app.Tick()
 		case <-daily.C:
 			u.app.CheckUpdate(ctx)
+		case <-health.C:
+			u.logHealth(&h)
 		}
 	}
 }
@@ -133,8 +147,13 @@ func (u *UI) render() {
 	u.tray.SetMenu(menu)
 }
 
+func (u *UI) logHealth(h *diag.Health) {
+	u.opts.Log.Printf("health: %s windows=%d", h.Line(), len(u.wails.Window.GetAll()))
+}
+
 // do runs a menu or notification action. Sync work runs off the UI thread.
 func (u *UI) do(id string) {
+	u.opts.Log.Printf("menu: %s", id)
 	switch id {
 	case "push":
 		go u.app.Push()
@@ -148,6 +167,8 @@ func (u *UI) do(id string) {
 		u.open("wizard")
 	case "status", "restore", "addons", "settings":
 		u.open(id)
+	case "logs":
+		u.openLogFolder()
 	}
 }
 
@@ -248,22 +269,40 @@ func (u *UI) open(name string) {
 			w.Focus()
 			return
 		}
-		p := pages[name]
-		w := u.wails.Window.NewWithOptions(application.WebviewWindowOptions{
-			Name: name, Title: "wtfsync — " + p.title, Width: p.width, Height: p.height, URL: "/" + name + ".html",
-		})
-		w.Show()
+		u.newWindow(name, pages[name], "/"+name+".html").Show()
 	})
 }
 
 func (u *UI) openConflicts(id int) {
 	application.InvokeAsync(func() {
-		p := pages["conflicts"]
-		w := u.wails.Window.NewWithOptions(application.WebviewWindowOptions{
-			Name: fmt.Sprintf("conflicts-%d", id), Title: "wtfsync — " + p.title, Width: p.width, Height: p.height,
-			URL: fmt.Sprintf("/conflicts.html?id=%d", id),
-		})
+		w := u.newWindow(fmt.Sprintf("conflicts-%d", id), pages["conflicts"], fmt.Sprintf("/conflicts.html?id=%d", id))
 		w.OnWindowEvent(events.Common.WindowClosing, func(*application.WindowEvent) { u.prompt.reply(id, nil, true) })
 		w.Show()
 	})
+}
+
+// newWindow makes one of the tray's windows, logging when it opens and closes. Its background
+// follows the Windows theme, so a page that hasn't loaded (or failed to) isn't a black box.
+func (u *UI) newWindow(name string, p page, url string) *application.WebviewWindow {
+	bg := application.NewRGB(0xff, 0xff, 0xff)
+	if u.wails.Env.IsDarkMode() {
+		bg = application.NewRGB(0x20, 0x20, 0x20)
+	}
+	u.opts.Log.Printf("window: open %s", name)
+	w := u.wails.Window.NewWithOptions(application.WebviewWindowOptions{
+		Name: name, Title: "wtfsync — " + p.title, Width: p.width, Height: p.height, URL: url, BackgroundColour: bg,
+	})
+	w.OnWindowEvent(events.Common.WindowClosing, func(*application.WindowEvent) { u.opts.Log.Printf("window: closed %s", name) })
+	return w
+}
+
+// openLogFolder shows tray.log and crash.log in Explorer.
+func (u *UI) openLogFolder() {
+	dir, err := windows.UTF16PtrFromString(u.opts.LogDir)
+	if err == nil {
+		err = windows.ShellExecute(0, windows.StringToUTF16Ptr("open"), dir, nil, nil, windows.SW_SHOWNORMAL)
+	}
+	if err != nil {
+		u.opts.Log.Printf("open log folder: %v", err)
+	}
 }
