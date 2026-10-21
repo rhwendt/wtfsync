@@ -2,7 +2,17 @@ module github.com/rhwendt/wtfsync
 
 go 1.26.0
 
-require golang.org/x/sys v0.49.0
+require (
+	github.com/srwiley/oksvg v0.0.0-20221011165216-be6e8873101c
+	github.com/srwiley/rasterx v0.0.0-20220730225603-2ab79fcdd4ef
+	golang.org/x/sys v0.49.0
+)
+
+require (
+	golang.org/x/image v0.41.0 // indirect
+	golang.org/x/net v0.60.0 // indirect
+	golang.org/x/text v0.42.0 // indirect
+)
 
 require (
 	git.sr.ht/~jackmordaunt/go-toast/v2 v2.0.3 // indirect
