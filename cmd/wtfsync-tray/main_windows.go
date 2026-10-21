@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"time"
 
 	"github.com/rhwendt/wtfsync/internal/app"
@@ -44,6 +45,14 @@ func run() error {
 	}
 	defer logFile.Close()
 	logger := log.New(logFile, "", log.LstdFlags)
+	// A GUI program has nowhere to print a crash: send it, with every goroutine's stack, to a file.
+	if crash, err := os.OpenFile(filepath.Join(dataDir, "crash.log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644); err == nil {
+		defer crash.Close()
+		debug.SetTraceback("all")
+		if err := debug.SetCrashOutput(crash, debug.CrashOptions{}); err != nil {
+			logger.Printf("crash log: %v", err)
+		}
+	}
 	exe, err := os.Executable()
 	if err != nil {
 		return err
@@ -57,7 +66,7 @@ func run() error {
 		Updates:   update.GitHub(),
 		Autostart: autostart.Run{Name: "wtfsync", Command: `"` + exe + `"`},
 		Version:   version,
-	}, ui.Options{InstallDirs: wow.DefaultInstallDirs(), Getenv: os.Getenv, Hostname: os.Hostname, Log: logger})
+	}, ui.Options{InstallDirs: wow.DefaultInstallDirs(), Getenv: os.Getenv, Hostname: os.Hostname, Log: logger, LogDir: dataDir})
 	if err != nil {
 		logger.Printf("exit: %v", err)
 	}

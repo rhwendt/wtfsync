@@ -76,10 +76,18 @@ commit messages, with the PR each came from. See [all releases](https://github.c
 | red | needs you: an error, a refused sync (close WoW first), a push waiting for the cloud folder, or missing addons |
 | blue | syncing |
 
-Its menu has Push, Pull, Status, Restore last backup, Missing addons, Settings and Update. A
+Its menu has Push, Pull, Status, Restore last backup, Missing addons, Settings, Update and Open
+log folder. A
 conflict (the same addon changed on both PCs) opens a window to choose which version to keep;
 Cancel changes nothing. The tray and the `wtfsync` command never sync at the same time: whichever
-starts second says "a sync is already running". The tray logs to `%APPDATA%\wtfsync\tray.log`.
+starts second says "a sync is already running".
+
+**Something wrong?** The menu's **Open log folder** opens `%APPDATA%\wtfsync`, which holds:
+
+- `tray.log`: each menu click, window, sync (with how long it took and any error), a health line
+  every 10 minutes (memory, CPU, open windows), and Wails' own warnings. A sync still running
+  after a minute also logs every goroutine's stack, which shows where a stuck tray is stuck.
+- `crash.log`: the full stack trace if the tray crashes.
 
 ## Build
 
