@@ -7,8 +7,10 @@ import (
 	"io"
 	"log"
 	"maps"
+	"runtime"
 	"slices"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/rhwendt/wtfsync/internal/autostart"
@@ -51,6 +53,11 @@ type Deps struct {
 	Notify    func(Notice) // may be nil
 	Changed   func()       // called after the View changes; may be nil
 	Log       *log.Logger  // may be nil
+
+	// StallAfter is how long an action or tick may run before the log gets what every goroutine
+	// is doing (0 means a minute); Stacks is where that comes from (nil means this process).
+	StallAfter time.Duration
+	Stacks     func() []byte
 }
 
 type App struct {
@@ -60,7 +67,8 @@ type App struct {
 
 	mu       sync.Mutex
 	busy     string
-	closing  bool // Close was called: no new actions or ticks
+	watching func() // ends the running action's watch
+	closing  bool   // Close was called: no new actions or ticks
 	flavors  map[string]*FlavorView
 	update   *update.Release
 	notified map[string]string // flavor → newest snapshot already announced
@@ -76,6 +84,12 @@ func New(d Deps) *App {
 	}
 	if d.Log == nil {
 		d.Log = log.New(io.Discard, "", 0)
+	}
+	if d.StallAfter == 0 {
+		d.StallAfter = time.Minute
+	}
+	if d.Stacks == nil {
+		d.Stacks = stacks
 	}
 	return &App{d: d, flavors: map[string]*FlavorView{}, notified: map[string]string{}}
 }
@@ -164,6 +178,8 @@ func (a *App) Tick() {
 	if closing || !a.act.TryLock() {
 		return // an action is running; it refreshes when it ends
 	}
+	stop := a.watch("tick", false)
+	defer stop()
 	if l, err := lock.Acquire(a.d.Store.Dir); err == nil {
 		if eng, flavors, err := a.enabled(); err == nil {
 			a.retryPending(eng, flavors)
@@ -209,6 +225,10 @@ func (a *App) begin(what string) bool {
 	a.busy = what
 	a.mu.Unlock()
 	a.act.Lock()
+	stop := a.watch(what, true)
+	a.mu.Lock()
+	a.watching = stop
+	a.mu.Unlock()
 	return true
 }
 
@@ -230,20 +250,60 @@ func (a *App) Close(wait time.Duration) bool {
 }
 
 func (a *App) end() {
+	a.mu.Lock()
+	stop := a.watching
+	a.watching = nil
+	a.mu.Unlock()
+	if stop != nil {
+		stop()
+	}
 	a.act.Unlock()
 	a.mu.Lock()
 	a.busy = ""
 	a.mu.Unlock()
 }
 
+// watch logs how long what takes. If it runs past StallAfter, it also logs every goroutine's stack
+// once, so a tray that seems stuck leaves a record of where. Quiet watches log only when slow.
+func (a *App) watch(what string, loud bool) (stop func()) {
+	start := time.Now()
+	if loud {
+		a.d.Log.Printf("%s: started", what)
+	}
+	var slow atomic.Bool
+	timer := time.AfterFunc(a.d.StallAfter, func() {
+		slow.Store(true)
+		a.d.Log.Printf("%s: still running after %v; goroutines:\n%s", what, a.d.StallAfter, a.d.Stacks())
+	})
+	return func() {
+		timer.Stop()
+		if loud || slow.Load() {
+			a.d.Log.Printf("%s: done in %v", what, time.Since(start).Round(time.Millisecond))
+		}
+	}
+}
+
+// stacks is every goroutine's stack in this process.
+func stacks() []byte {
+	for n := 1 << 16; ; n *= 2 {
+		buf := make([]byte, n)
+		if l := runtime.Stack(buf, true); l < n {
+			return buf[:l]
+		}
+	}
+}
+
 // run does one user action: busy state, the per-PC lock, then fn per enabled flavor (or only the
 // flavor named by only). Per-flavor errors are kept on the flavor and raised as notifications.
-func (a *App) run(what, only string, fn func(eng *engine.Engine, f wow.Flavor) error) error {
+func (a *App) run(what, only string, fn func(eng *engine.Engine, f wow.Flavor) error) (err error) {
 	if !a.begin(what) {
 		return ErrBusy
 	}
 	a.d.Changed()
 	defer func() {
+		if err != nil {
+			a.d.Log.Printf("%s: failed: %v", what, err)
+		}
 		a.end()
 		a.Refresh()
 	}()
@@ -277,7 +337,6 @@ func (a *App) run(what, only string, fn func(eng *engine.Engine, f wow.Flavor) e
 		}
 		a.mu.Unlock()
 		if err != nil {
-			a.d.Log.Printf("%s %s: %v", what, f.Name, err)
 			a.d.Notify(Notice{ID: "error-" + f.Name, Title: "wtfsync: " + f.Name, Body: friendly(f.Name, err)})
 			errs = append(errs, fmt.Errorf("%s: %w", f.Name, err))
 			if errors.Is(err, engine.ErrAborted) {
@@ -350,12 +409,15 @@ func (a *App) flavor(name string) (*engine.Engine, wow.Flavor, error) {
 }
 
 // Setup runs the wizard's answers (first setup, or a rerun).
-func (a *App) Setup(ans setup.Answers) (setup.Result, error) {
+func (a *App) Setup(ans setup.Answers) (res setup.Result, err error) {
 	if !a.begin("setting up") {
 		return setup.Result{}, ErrBusy
 	}
 	a.d.Changed()
 	defer func() {
+		if err != nil {
+			a.d.Log.Printf("setting up: failed: %v", err)
+		}
 		a.end()
 		a.Refresh()
 	}()

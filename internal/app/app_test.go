@@ -31,7 +31,7 @@ func TestNotSetUpOffersSetupOnly(t *testing.T) {
 	if v.SetUp || v.Icon != Attention || v.Tooltip != "wtfsync — not set up" {
 		t.Fatalf("view %+v", v)
 	}
-	if got := ids(Menu(v)); !reflect.DeepEqual(got, []string{"setup", "-", "quit"}) {
+	if got := ids(Menu(v)); !reflect.DeepEqual(got, []string{"setup", "-", "logs", "quit"}) {
 		t.Fatalf("menu %v", got)
 	}
 }
@@ -42,7 +42,7 @@ func TestInSyncAfterSetup(t *testing.T) {
 	if !v.SetUp || v.Icon != Idle || v.Tooltip != "wtfsync — in sync" || len(v.Flavors) != 1 {
 		t.Fatalf("view %+v", v)
 	}
-	want := []string{"push", "pull", "-", "status", "restore", "settings", "-", "quit"}
+	want := []string{"push", "pull", "-", "status", "restore", "settings", "-", "logs", "quit"}
 	if got := ids(Menu(v)); !reflect.DeepEqual(got, want) {
 		t.Fatalf("menu %v, want %v", got, want)
 	}
@@ -246,7 +246,7 @@ func TestUpdateOfferedOnlyWhenNewer(t *testing.T) {
 		}
 	}
 	last := Menu(nyApp.View())
-	if it := last[len(last)-3]; it.ID != "update" || it.Label != "Update to v0.6.0" {
+	if it := last[len(last)-4]; it.ID != "update" || it.Label != "Update to v0.6.0" {
 		t.Fatalf("menu %+v", last)
 	}
 	ny.updates.err = errOffline // offline: keep quiet, keep the offer

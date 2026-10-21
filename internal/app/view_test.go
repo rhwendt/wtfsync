@@ -21,7 +21,7 @@ func TestMenuDisablesSyncWhileBusy(t *testing.T) {
 		t.Fatalf("view %+v", v)
 	}
 	for _, it := range Menu(v) {
-		want := it.ID == "status" || it.ID == "quit"
+		want := it.ID == "status" || it.ID == "logs" || it.ID == "quit"
 		if it.ID != "-" && it.Enabled != want {
 			t.Errorf("%s enabled = %v while busy", it.ID, it.Enabled)
 		}

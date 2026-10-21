@@ -114,7 +114,7 @@ type MenuItem struct {
 // Menu builds the tray menu for v. ui maps IDs to actions.
 func Menu(v View) []MenuItem {
 	if !v.SetUp {
-		return []MenuItem{{"setup", "Set up wtfsync…", v.Busy == ""}, {"-", "", false}, {"quit", "Quit", true}}
+		return []MenuItem{{"setup", "Set up wtfsync…", v.Busy == ""}, {"-", "", false}, logs, {"quit", "Quit", true}}
 	}
 	idle := v.Busy == ""
 	m := []MenuItem{
@@ -131,8 +131,11 @@ func Menu(v View) []MenuItem {
 	if v.Update != "" {
 		m = append(m, MenuItem{"update", "Update to " + v.Update, idle})
 	}
-	return append(m, MenuItem{"-", "", false}, MenuItem{"quit", "Quit", true})
+	return append(m, MenuItem{"-", "", false}, logs, MenuItem{"quit", "Quit", true})
 }
+
+// logs opens the folder holding tray.log and crash.log, so they're easy to send for debugging.
+var logs = MenuItem{"logs", "Open log folder", true}
 
 // friendly turns an engine error into the words a notification shows.
 func friendly(flavor string, err error) string {
