@@ -72,7 +72,10 @@ Missing addons don't change the badge; they show on the flavor page. Under the l
 **Settings** (⚙) replaces the flavor page, with "← Back" (selecting a flavor also leaves it):
 - This PC: name.
 - Folders: WoW folder, cloud folder, each with Browse….
-- Flavors: on/off switch per flavor found in the WoW folder.
+- Flavors: an **All flavors** switch, on by default. On, every flavor in the WoW folder syncs,
+  including ones installed later, and the individual switches are hidden. Turning it off shows an
+  on/off switch per flavor found, starting from what currently syncs; a flavor installed later
+  then starts off until switched on.
 - Appearance: System / Light / Dark — applies and saves immediately.
 - Startup: Start wtfsync when Windows starts.
 - About: version and update state ("up to date" / "v0.9.0 available"), **Check for updates**,
@@ -115,7 +118,7 @@ The M2 split holds: `internal/app` decides what to show and does it (testable on
 |---|---|
 | `internal/app` | `FlavorPage` per flavor: name, badge (kind + short text + words), status line, error, backups, missing addons. Time wording (`when(t, now)`). Badge rules above. `Backups(flavor)` and `Restore(flavor, id)` for a chosen set (`""` = newest, as now). `SetAppearance`. Menu model per the Tray section. Replaces `StatusRows`/`AddonRows`. |
 | `internal/engine` | Records why a backup was made: pull from <PC>, restore. Status gains the time and PC of the base snapshot (for the status line). |
-| `internal/local` | Backup index gains `reason` (`"pull"` + `from`, or `"restore"`); old indexes without it read as no reason. `BackupInfo{ID, Time, Reason, From, Files}` listing. Settings gain `appearance` (`"system"`, `"light"`, `"dark"`; empty = system). |
+| `internal/local` | Backup index gains `reason` (`"pull"` + `from`, or `"restore"`); old indexes without it read as no reason. `BackupInfo{ID, Time, Reason, From, Files}` listing. Settings gain `appearance` (`"system"`, `"light"`, `"dark"`; empty = system) and `allFlavors` (bool). Settings written before it have no `allFlavors`: they read as all when every listed flavor is on, otherwise as individual choices with unlisted flavors off, so nobody's choices change on upgrade. |
 | `internal/ui` | One main window (named `main`) instead of five; tray left-click and menu wiring; Bridge methods for the page data, actions, backups, restore, settings, appearance; a Wails event `changed` emitted from the existing `Changed` hook so the page reloads its data. Window background from the theme. |
 | `internal/ui/web` | `main.html` (flavor list, flavor page, settings, wizard as views of one page), `conflicts.html`, shared `app.css` / `app.js`, `index.html` kept. `status.html`, `restore.html`, `addons.html`, `settings.html`, `wizard.html` removed. |
 
@@ -137,7 +140,7 @@ new time wording but doesn't have to.
 - **Linux unit tests** (`internal/app`, `internal/local`, `internal/engine`): badge and words for
   each state and their priority (error > pending > unreachable > newer > local changes > never
   synced > in sync); status line wording; time wording (today, yesterday, this year, other year);
-  backup listing newest first with reason and from, including old indexes without a reason;
+  All flavors on/off (including a flavor installed later, and old settings without the field); backup listing newest first with reason and from, including old indexes without a reason;
   restoring a chosen set (and the new undo set); a pruned set errors; appearance saved, unknown
   read as system; tray menu items set up and not set up.
 - **CI:** unchanged — tests on ubuntu and windows, `GOOS=windows go vet`, build both executables
