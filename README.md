@@ -3,13 +3,13 @@
 Sync World of Warcraft addon settings (SavedVariables) between PCs through a folder your cloud
 client already syncs (Google Drive for Desktop, OneDrive, iCloud, Dropbox).
 
-![The wtfsync window: flavors on the left, the selected flavor's status, backups and missing addons on the right](docs/screenshots/main.png)
+![The wtfsync window: flavors on the left, the selected flavor's status, restore points and missing addons on the right](docs/screenshots/main.png)
 
 It syncs `WTF/Account/**/SavedVariables/*.lua` for every installed flavor (retail, classic, …).
 It never touches `Config.wtf` (graphics/hardware settings stay per-PC) or addon code.
 
-It doesn't install addons, but it tells you what you're missing. Each push records the PC's
-installed addons, and `pull`, `push` and `status` on the other PC list any it doesn't have, with
+It doesn't install addons, but it tells you what you're missing. Each sync records the PC's
+installed addons, and `sync`, `pull` and `status` on the other PC list any it doesn't have, with
 a download link when the addon's `.toc` names its CurseForge, Wago or WoWInterface project:
 
     laptop has addons not installed here:
@@ -36,12 +36,13 @@ makes the next sync ask once which settings to use, like a first link.
 
 Close WoW, then:
 
-    wtfsync push      # after playing
-    wtfsync pull      # before playing on the other PC
+    wtfsync sync      # after playing, and before playing on the other PC
     wtfsync status    # what's changed, and whether you're behind
 
-If the same addon's settings changed on both PCs, wtfsync asks which one to keep. Every pull backs
-up the files it overwrites; `wtfsync restore` puts the newest backup back.
+`sync` gets what your other PCs synced, then uploads this PC's changes. If the same addon's
+settings changed on both PCs, wtfsync asks which one to keep. Every file a sync overwrites is
+backed up first; `wtfsync restore` puts the newest backup back. To go back further, the tray
+window lists every recent sync as a restore point.
 
 Add `--dry-run` to any command to see what it would do without changing anything.
 
@@ -75,18 +76,21 @@ along its bottom shows the state:
 | Strip | Means |
 |---|---|
 | green ✓ | every flavor is in sync |
-| amber ↓ | another PC pushed newer settings (a notification offers **Pull**) |
-| red ! | needs you: an error, a refused sync (close WoW first), a push waiting for the cloud folder, or missing addons |
+| amber ↓ | another PC synced newer settings (a notification offers **Sync**) |
+| red ! | needs you: an error, a refused sync (close WoW first), a sync waiting for the cloud folder, or missing addons |
 | blue ⟳ | syncing |
 
-Click the icon to open the wtfsync window; right-click for the menu (Open wtfsync, Push, Pull,
+Click the icon to open the wtfsync window; right-click for the menu (Open wtfsync, Sync,
 Settings, Update, Open log folder, Quit). Closing the window keeps wtfsync running in the tray.
 
 In the window, pick a WoW flavor on the left to see everything about it: whether it's in sync and
-when it last synced, **Pull** and **Push** for just that flavor, its backups (pick one and
-**Restore…** — what's there now is backed up first, so a restore can be undone), and addons your
-other PCs have that this one doesn't, with download links. **Pull all** and **Push all** are in the
-top bar.
+when it last synced, **Sync** for just that flavor, its restore points, and addons your other PCs
+have that this one doesn't, with download links. **Sync all** is in the top bar.
+
+**Restore points** are the flavor's recent syncs from any of your PCs (the cloud folder keeps the
+last 20), newest first. The one your files match now is marked *current*. Pick another and
+**Restore…** to put the settings back as they were then; what's there now is saved first. Then
+**Sync** to send it to your other PCs, or restore the newest point to undo.
 
 **⚙ Settings** has this PC's name, the WoW and cloud folders, which flavors to sync (**All
 flavors**, or pick them), Appearance (System, Light or Dark), start with Windows, updates, and
@@ -137,6 +141,15 @@ PC's, or choose per file.
 
     wtfsync link
 
+### `wtfsync sync`
+
+Gets what your other PCs synced, then uploads this PC's changes: the same as the tray's **Sync**,
+and the same as `push`. Files changed only on another PC are taken, files changed only here are
+kept, and files changed on both ask which to keep.
+
+    wtfsync sync
+    wtfsync sync --flavor classic
+
 ### `wtfsync push`
 
 Uploads this PC's addon settings for every enabled flavor as a new snapshot. If another PC pushed
@@ -179,7 +192,7 @@ Prints the version.
 
 | Flag | Applies to | Meaning |
 |---|---|---|
-| `--flavor <name>` | push, pull, status, restore | only this flavor (`retail`, `classic`, …); default: every enabled flavor |
+| `--flavor <name>` | sync, push, pull, status, restore | only this flavor (`retail`, `classic`, …); default: every enabled flavor |
 | `--dry-run` | all but version | show what would change; change nothing |
 | `--wow-dir <path>` | all but version | WoW install folder (overrides settings) |
 | `--sync-dir <path>` | all but version | the cloud-synced folder (overrides settings) |
@@ -219,7 +232,7 @@ builds `dist/wtfsync.exe`, `dist/wtfsync-tray.exe`, `dist/wtfsync-setup.exe` and
 11. Update from one release to the next from the tray menu; the tray comes back on its own.
 12. Uninstall: programs, shortcut and startup entry gone; `%APPDATA%\wtfsync` still there.
 13. Tray left-click opens and focuses the window; closing it hides it; Quit from the menu really quits.
-14. Badges on both PCs match reality: ✓, ↑ N after editing a file, ↓ after the other PC pushes, `new` for a flavor never synced.
-15. Restore an older backup (not the newest), then restore the "before restore" backup to undo it.
+14. Badges on both PCs match reality: ✓, ↑ N after editing a file, ↓ after the other PC syncs, `new` for a flavor never synced.
+15. Restore points on the PC that synced last: its own syncs are listed, the newest marked current. Restore an older one: the page shows changes to sync and that point current; Sync, and the other PC's Sync gets it. Restore the newest to undo.
 16. Appearance Light / Dark / System, including Windows switching theme while the window is open.
 17. An update on offer: the toast shows when the window opens; **Later** hides it until the next version; **Update now** installs and the tray comes back.
