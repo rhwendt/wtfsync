@@ -68,7 +68,7 @@ func Run(d app.Deps, o Options) error {
 	u.wails = application.New(application.Options{
 		Name:        "wtfsync",
 		Description: "Syncs World of Warcraft addon settings between your PCs",
-		Icon:        icons.App, // title bar and taskbar of every window
+		Icon:        icons.AppOnDark, // the taskbar's until setIcon picks one for the Windows theme
 		Services:    []application.Service{application.NewService(u.notes), application.NewService(&Bridge{u: u})},
 		Assets:      application.AssetOptions{Handler: application.AssetFileServerFS(web)},
 		SingleInstance: &application.SingleInstanceOptions{
@@ -86,6 +86,13 @@ func Run(d app.Deps, o Options) error {
 	if slices.Contains(os.Args[1:], "--quit") {
 		return nil // no other tray was running
 	}
+	u.wails.Event.OnApplicationEvent(events.Windows.SystemThemeChanged, func(*application.ApplicationEvent) {
+		application.InvokeAsync(func() {
+			for _, w := range u.wails.Window.GetAll() {
+				setIcon(w)
+			}
+		})
+	})
 	u.tray = u.wails.SystemTray.New()
 	u.tray.OnClick(func() { u.showMain("") }) // right-click still shows the menu
 	u.render()
@@ -275,7 +282,7 @@ func (u *UI) showMain(view string) {
 		} else if view != "" {
 			addr += "?view=" + view
 		}
-		w := u.newWindow("main", "wtfsync", 860, 560, addr)
+		w := u.newWindow("main", "", 860, 560, addr) // no title: the page's top bar has the logo
 		w.RegisterHook(events.Common.WindowClosing, func(e *application.WindowEvent) {
 			if u.quitting.Load() {
 				return
@@ -284,6 +291,7 @@ func (u *UI) showMain(view string) {
 			w.Hide()
 		})
 		w.Show()
+		setIcon(w)
 	})
 }
 
@@ -293,11 +301,13 @@ func (u *UI) openConflicts(id int) {
 		w := u.newWindow(fmt.Sprintf("conflicts-%d", id), "Settings changed on both PCs", 680, 480, fmt.Sprintf("/conflicts.html?id=%d", id))
 		w.OnWindowEvent(events.Common.WindowClosing, func(*application.WindowEvent) { u.prompt.reply(id, nil, true) })
 		w.Show()
+		setIcon(w)
 	})
 }
 
 // newWindow makes one of the tray's windows, logging when it opens and closes. Its background
 // matches the appearance setting, so a page that hasn't loaded (or failed to) isn't a black box.
+// Its title bar has no icon; the taskbar's is set by setIcon once it's shown.
 func (u *UI) newWindow(name, title string, width, height int, url string) *application.WebviewWindow {
 	s, _, _ := u.app.Settings()
 	theme := s.Theme()
@@ -308,6 +318,7 @@ func (u *UI) newWindow(name, title string, width, height int, url string) *appli
 	u.opts.Log.Printf("window: open %s", name)
 	w := u.wails.Window.NewWithOptions(application.WebviewWindowOptions{
 		Name: name, Title: title, Width: width, Height: height, MinWidth: 640, MinHeight: 420, URL: url, BackgroundColour: bg,
+		Windows: application.WindowsWindow{DisableIcon: true},
 	})
 	w.OnWindowEvent(events.Common.WindowClosing, func(*application.WindowEvent) { u.opts.Log.Printf("window: closed %s", name) })
 	return w
