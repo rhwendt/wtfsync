@@ -59,14 +59,16 @@ Uninstalling (Settings → Apps) keeps your settings and backups in `%APPDATA%\w
 
 The release also has `wtfsync.exe` on its own, for using just the command line.
 
-Releases are automatic: every merge to `main` that includes a `feat:`, `fix:`, `perf:` or breaking
-change ([Conventional Commits](https://www.conventionalcommits.org/)) publishes a new version. `fix`
-bumps the patch number, `feat` the minor, and a breaking change (`feat!:` or a `BREAKING CHANGE:`
-footer) the major (the minor while still 0.x). Merges with only `docs:`, `chore:`, `ci:`, `test:` or
-`refactor:` commits don't release.
+Releases are automatic, from the commit messages ([Conventional Commits](https://www.conventionalcommits.org/)).
+After a merge to `main` that includes a `feat:`, `fix:`, `perf:` or breaking change, a release PR
+appears with the next version and its [CHANGELOG.md](CHANGELOG.md) entry; merging it (automatic
+once CI passes) publishes the release. `fix` bumps the patch number, `feat` the minor, and a
+breaking change (`feat!:` or a `BREAKING CHANGE:` footer) the major (the minor while still 0.x).
+`docs:`, `chore:`, `ci:`, `test:` and `refactor:` commits don't release.
 
-Each release's notes are the changelog: its features, fixes and breaking changes, grouped from the
-commit messages, with the PR each came from. See [all releases](../../releases).
+[CHANGELOG.md](CHANGELOG.md) lists every version's features and fixes, each linked to its PR and
+commit; each [release](../../releases)'s notes are the same entry, with a link comparing it to the
+previous version.
 
 ## Tray app
 
