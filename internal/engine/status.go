@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/rhwendt/wtfsync/internal/collect"
+	"github.com/rhwendt/wtfsync/internal/local"
 	"github.com/rhwendt/wtfsync/internal/syncdir"
 	"github.com/rhwendt/wtfsync/internal/wow"
 )
@@ -83,7 +84,7 @@ func (e *Engine) Restore(f wow.Flavor, id string, opt Options) (RestoreReport, e
 	if opt.DryRun {
 		return rep, nil
 	}
-	if rep.Undo, err = e.Store.Backup(f.Name, f.WTFDir(), paths, e.Now()); err != nil {
+	if rep.Undo, err = e.Store.Backup(f.Name, f.WTFDir(), paths, e.Now(), local.Why{Reason: local.ReasonRestore}); err != nil {
 		return rep, err
 	}
 	return rep, e.Store.Restore(f.Name, id, f.WTFDir())

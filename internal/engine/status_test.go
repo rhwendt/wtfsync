@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"reflect"
 	"testing"
+
+	"github.com/rhwendt/wtfsync/internal/local"
 )
 
 func TestStatus(t *testing.T) {
@@ -63,5 +65,26 @@ func TestRestoreRefusedWhileGameRunning(t *testing.T) {
 	v.procs.running = true
 	if _, err := v.eng.Restore(v.flavor, "", Options{}); !errors.Is(err, ErrGameRunning) {
 		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestBackupsSayWhyTheyWereMade(t *testing.T) {
+	v := newEnv(t)
+	s1 := v.remote(1, map[string]string{pathA: "a1"})
+	v.synced(s1, map[string]string{pathA: "a1"})
+	v.writeLocal(pathA, "a1")
+	v.remote(2, map[string]string{pathA: "a2"})
+	if _, err := v.eng.Pull(v.flavor, Options{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := v.eng.Restore(v.flavor, "", Options{}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := v.eng.Store.Backups("retail")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 || got[0].Reason != local.ReasonRestore || got[1].Reason != local.ReasonPull || got[1].From != "NJ" {
+		t.Fatalf("backups %+v", got)
 	}
 }

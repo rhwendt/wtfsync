@@ -169,7 +169,7 @@ func (e *Engine) merge(f wow.Flavor, d *syncdir.Dir, st local.FlavorState, n syn
 		}
 	}
 	if len(take) > 0 {
-		if rep.Backup, err = e.Store.Backup(f.Name, f.WTFDir(), take, e.Now()); err != nil {
+		if rep.Backup, err = e.Store.Backup(f.Name, f.WTFDir(), take, e.Now(), local.Why{Reason: local.ReasonPull, From: m.Machine.Name}); err != nil {
 			return st, err
 		}
 		for _, p := range take {
