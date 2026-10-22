@@ -344,12 +344,20 @@ func (a *App) run(what, only string, fn func(eng *engine.Engine, f wow.Flavor) e
 			}
 		}
 	}
+	if only != "" && !slices.ContainsFunc(flavors, func(f wow.Flavor) bool { return f.Name == only }) {
+		return fmt.Errorf("no enabled flavor %q", only)
+	}
 	return errors.Join(errs...)
 }
 
 // Push pushes every enabled flavor.
-func (a *App) Push() error {
-	return a.run("pushing", "", func(eng *engine.Engine, f wow.Flavor) error {
+func (a *App) Push() error { return a.push("") }
+
+// PushFlavor pushes one enabled flavor.
+func (a *App) PushFlavor(name string) error { return a.push(name) }
+
+func (a *App) push(only string) error {
+	return a.run(doing("pushing", only), only, func(eng *engine.Engine, f wow.Flavor) error {
 		_, err := eng.Push(f, engine.Options{})
 		return err
 	})
@@ -357,8 +365,13 @@ func (a *App) Push() error {
 
 // Pull pulls every enabled flavor (retrying a pending push first, as the CLI does) and then
 // announces addons other PCs have that this one doesn't, when that list has grown.
-func (a *App) Pull() error {
-	err := a.run("pulling", "", func(eng *engine.Engine, f wow.Flavor) error {
+func (a *App) Pull() error { return a.pull("") }
+
+// PullFlavor pulls one enabled flavor.
+func (a *App) PullFlavor(name string) error { return a.pull(name) }
+
+func (a *App) pull(only string) error {
+	err := a.run(doing("pulling", only), only, func(eng *engine.Engine, f wow.Flavor) error {
 		a.retryPending(eng, []wow.Flavor{f})
 		_, err := eng.Pull(f, engine.Options{})
 		return err
@@ -375,21 +388,29 @@ func (a *App) Pull() error {
 	return err
 }
 
-// RestorePreview lists what restoring flavor's newest backup would change.
-func (a *App) RestorePreview(flavor string) (engine.RestoreReport, error) {
+// doing is the busy text: "pulling", or "pulling classic" for one flavor.
+func doing(what, only string) string {
+	if only == "" {
+		return what
+	}
+	return what + " " + only
+}
+
+// RestorePreview lists what restoring one of flavor's backup sets (id "" = the newest) would change.
+func (a *App) RestorePreview(flavor, id string) (engine.RestoreReport, error) {
 	eng, f, err := a.flavor(flavor)
 	if err != nil {
 		return engine.RestoreReport{}, err
 	}
-	return eng.Restore(f, "", engine.Options{DryRun: true})
+	return eng.Restore(f, id, engine.Options{DryRun: true})
 }
 
-// Restore puts flavor's newest backup back (backing up what it replaces, as the CLI does).
-func (a *App) Restore(flavor string) (engine.RestoreReport, error) {
+// Restore puts one of flavor's backup sets back (id "" = the newest), backing up what it replaces.
+func (a *App) Restore(flavor, id string) (engine.RestoreReport, error) {
 	var rep engine.RestoreReport
-	err := a.run("restoring", flavor, func(eng *engine.Engine, f wow.Flavor) error {
+	err := a.run("restoring "+flavor, flavor, func(eng *engine.Engine, f wow.Flavor) error {
 		var err error
-		rep, err = eng.Restore(f, "", engine.Options{})
+		rep, err = eng.Restore(f, id, engine.Options{})
 		return err
 	})
 	return rep, err
@@ -466,16 +487,16 @@ func (a *App) SaveSettings(in SettingsInput) (setup.Result, error) {
 	return res, nil
 }
 
-// CheckUpdate looks for a newer release and offers it in the menu. Failures are only logged:
-// being offline mustn't nag.
-func (a *App) CheckUpdate(ctx context.Context) {
+// CheckUpdate looks for a newer release and offers it. Failures are logged and returned but never
+// raised as notifications: being offline mustn't nag.
+func (a *App) CheckUpdate(ctx context.Context) error {
 	if a.d.Updates == nil {
-		return
+		return nil
 	}
 	r, err := a.d.Updates.Latest(ctx)
 	if err != nil {
 		a.d.Log.Printf("check for updates: %v", err)
-		return
+		return err
 	}
 	a.mu.Lock()
 	if update.Newer(a.d.Version, r.Version) {
@@ -485,6 +506,7 @@ func (a *App) CheckUpdate(ctx context.Context) {
 	}
 	a.mu.Unlock()
 	a.d.Changed()
+	return nil
 }
 
 // InstallUpdate downloads the offered release into dir, waits for any sync to finish, then calls
@@ -549,4 +571,41 @@ func (a *App) StartsAtLogin() bool {
 	}
 	on, err := a.d.Autostart.Enabled()
 	return err == nil && on
+}
+
+// SetAppearance saves this PC's appearance: "system", "light" or "dark".
+func (a *App) SetAppearance(v string) error {
+	switch v {
+	case "system", "light", "dark":
+	default:
+		return fmt.Errorf("unknown appearance %q", v)
+	}
+	s, err := a.d.Store.LoadSettings()
+	if err != nil {
+		return err
+	}
+	s.Appearance = v
+	if err := a.d.Store.SaveSettings(s); err != nil {
+		return err
+	}
+	a.d.Changed()
+	return nil
+}
+
+// CloudPCs names the PCs whose wtfsync data is in folder, other than this one; empty when the folder
+// has none (or can't be read). The wizard uses it to offer "Join <PC>".
+func (a *App) CloudPCs(folder string) []string {
+	names := []string{}
+	d, err := syncdir.Open(folder, a.d.Hydrator)
+	if err != nil {
+		return names
+	}
+	me, _ := a.d.Store.LoadSettings()
+	machines, _ := d.Machines()
+	for _, m := range machines {
+		if m.UUID != me.MachineUUID {
+			names = append(names, m.Name)
+		}
+	}
+	return names
 }

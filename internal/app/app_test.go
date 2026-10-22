@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/rhwendt/wtfsync/internal/engine"
+	"github.com/rhwendt/wtfsync/internal/local"
 	"github.com/rhwendt/wtfsync/internal/lock"
 	"github.com/rhwendt/wtfsync/internal/update"
 )
@@ -42,7 +43,7 @@ func TestInSyncAfterSetup(t *testing.T) {
 	if !v.SetUp || v.Icon != Idle || v.Tooltip != "wtfsync — in sync" || len(v.Flavors) != 1 {
 		t.Fatalf("view %+v", v)
 	}
-	want := []string{"push", "pull", "-", "status", "restore", "settings", "-", "logs", "quit"}
+	want := []string{"open", "push", "pull", "settings", "-", "logs", "quit"}
 	if got := ids(Menu(v)); !reflect.DeepEqual(got, want) {
 		t.Fatalf("menu %v, want %v", got, want)
 	}
@@ -76,7 +77,7 @@ func TestTickAnnouncesNewSettingsOnce(t *testing.T) {
 	}
 }
 
-func TestPullAnnouncesMissingAddonsAndMenuListsThem(t *testing.T) {
+func TestPullAnnouncesMissingAddons(t *testing.T) {
 	nj, ny, njApp, nyApp := linked(t)
 	nj.install("Plater", "## X-Curse-Project-ID: 100547")
 	nj.write("Account/123#1/SavedVariables/Plater.lua", "p")
@@ -92,13 +93,6 @@ func TestPullAnnouncesMissingAddonsAndMenuListsThem(t *testing.T) {
 		t.Fatalf("view %+v", v)
 	}
 	contains(t, v.Tooltip, "1 addon(s) missing here")
-	found := false
-	for _, it := range Menu(v) {
-		found = found || (it.ID == "addons" && it.Label == "Missing addons (1)…")
-	}
-	if !found {
-		t.Fatalf("menu %+v", Menu(v))
-	}
 	nyApp.Pull() // same list again: no second notice
 	if n := len(ny.notices.ids()); n != 1 {
 		t.Fatalf("notices %v", ny.notices.ids())
@@ -188,12 +182,12 @@ func TestRestoreOneFlavor(t *testing.T) {
 	nj.write(svA, "a-nj")
 	njApp.Push()
 	nyApp.Pull()
-	prev, err := nyApp.RestorePreview("retail")
+	prev, err := nyApp.RestorePreview("retail", "")
 	if err != nil || !reflect.DeepEqual(prev.Paths, []string{svA}) || prev.Undo != "" {
 		t.Fatalf("preview %+v, %v", prev, err)
 	}
 	ny.want(svA, "a-nj") // preview changes nothing
-	rep, err := nyApp.Restore("retail")
+	rep, err := nyApp.Restore("retail", "")
 	if err != nil || rep.Undo == "" {
 		t.Fatalf("restore %+v, %v", rep, err)
 	}
@@ -389,5 +383,116 @@ func TestSaveSettingsAllFlavorsOffKeepsALaterFlavorOff(t *testing.T) {
 	nyApp.Refresh()
 	if v := nyApp.View(); len(v.Flavors) != 2 {
 		t.Fatalf("flavors %+v, want classic and retail", v.Flavors)
+	}
+}
+
+func TestFlavorActionsActOnOneFlavor(t *testing.T) {
+	nj, ny, njApp, nyApp := linked(t)
+	nj.write(svA, "a-nj")
+	if err := njApp.PushFlavor("retail"); err != nil {
+		t.Fatal(err)
+	}
+	if err := nyApp.PullFlavor("retail"); err != nil {
+		t.Fatal(err)
+	}
+	ny.want(svA, "a-nj")
+	if err := nyApp.PullFlavor("classic"); err == nil {
+		t.Fatal("pulling a flavor that isn't enabled should fail")
+	}
+}
+
+func TestFlavorActionWhileBusyIsRefused(t *testing.T) {
+	_, _, _, nyApp := linked(t)
+	nyApp.begin("pulling")
+	defer nyApp.end()
+	if err := nyApp.PushFlavor("retail"); !errors.Is(err, ErrBusy) {
+		t.Fatalf("push: %v", err)
+	}
+	if _, err := nyApp.Restore("retail", ""); !errors.Is(err, ErrBusy) {
+		t.Fatalf("restore: %v", err)
+	}
+}
+
+func TestRestoreChosenBackup(t *testing.T) {
+	nj, ny, njApp, nyApp := linked(t)
+	nj.write(svA, "a1")
+	njApp.Push()
+	nyApp.Pull() // backup 1 holds a0
+	nj.write(svA, "a2")
+	njApp.Push()
+	nyApp.Pull() // backup 2 holds a1
+	// Newest first; linking made one more at the end.
+	sets := nyApp.Main().Flavors[0].Backups
+	if len(sets) < 2 {
+		t.Fatalf("backups %+v", sets)
+	}
+	older := sets[1].ID
+	prev, err := nyApp.RestorePreview("retail", older)
+	if err != nil || !reflect.DeepEqual(prev.Paths, []string{svA}) {
+		t.Fatalf("preview %+v, %v", prev, err)
+	}
+	rep, err := nyApp.Restore("retail", older)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ny.want(svA, "a0")
+	after := nyApp.Main().Flavors[0].Backups
+	if after[0].ID != rep.Undo || after[0].Reason != "before restore" {
+		t.Fatalf("undo set %q not first: %+v", rep.Undo, after)
+	}
+}
+
+func TestRestorePrunedBackupSaysSo(t *testing.T) {
+	nj, ny, njApp, nyApp := linked(t)
+	nj.write(svA, "a1")
+	njApp.Push()
+	nyApp.Pull()
+	_, err := nyApp.Restore("retail", "20000101T000000.000Z")
+	if !errors.Is(err, local.ErrNoBackup) {
+		t.Fatalf("err = %v, want ErrNoBackup", err)
+	}
+	ny.want(svA, "a1") // nothing written
+	if b := nyApp.Main().Flavors[0].Badge; b.Words != "That backup no longer exists" {
+		t.Fatalf("badge %+v", b)
+	}
+}
+
+func TestSetAppearance(t *testing.T) {
+	_, _, _, nyApp := linked(t)
+	changed := 0
+	nyApp.d.Changed = func() { changed++ }
+	if err := nyApp.SetAppearance("dark"); err != nil {
+		t.Fatal(err)
+	}
+	if nyApp.Main().Appearance != "dark" || changed == 0 {
+		t.Fatalf("appearance %q, changed %d", nyApp.Main().Appearance, changed)
+	}
+	if err := nyApp.SetAppearance("purple"); err == nil {
+		t.Fatal("unknown appearance accepted")
+	}
+	_, fresh := newPair(t)
+	if err := fresh.app().SetAppearance("dark"); err == nil {
+		t.Fatal("appearance saved on a PC that isn't set up")
+	}
+}
+
+func TestCloudPCsNamesTheOtherPCs(t *testing.T) {
+	nj, _, njApp, nyApp := linked(t)
+	if got := nyApp.CloudPCs(nj.sync); !reflect.DeepEqual(got, []string{"NJ"}) {
+		t.Fatalf("from NY: %v", got)
+	}
+	if got := njApp.CloudPCs(nj.sync); !reflect.DeepEqual(got, []string{"NY"}) {
+		t.Fatalf("from NJ: %v", got)
+	}
+	if got := nyApp.CloudPCs(t.TempDir()); got == nil || len(got) != 0 {
+		t.Fatalf("empty folder: %#v", got)
+	}
+}
+
+func TestCheckUpdateReturnsItsError(t *testing.T) {
+	_, ny, _, nyApp := linked(t)
+	ny.updates.err = errOffline
+	if err := nyApp.CheckUpdate(context.Background()); !errors.Is(err, errOffline) {
+		t.Fatalf("err = %v", err)
 	}
 }

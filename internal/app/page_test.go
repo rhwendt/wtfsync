@@ -52,7 +52,9 @@ func TestWhen(t *testing.T) {
 
 func TestStatusLine(t *testing.T) {
 	now := time.Date(2026, 10, 22, 9, 0, 0, 0, time.UTC)
-	name := func(at time.Time) string { return syncdir.SnapshotName{Seq: 1, Time: at, UUID: "00000000-0000-4000-8000-000000000001"}.String() }
+	name := func(at time.Time) string {
+		return syncdir.SnapshotName{Seq: 1, Time: at, UUID: "00000000-0000-4000-8000-000000000001"}.String()
+	}
 	today := name(time.Date(2026, 10, 22, 3, 51, 0, 0, time.UTC))
 	oct19 := name(time.Date(2026, 10, 19, 2, 7, 0, 0, time.UTC))
 	oct20 := name(time.Date(2026, 10, 20, 3, 51, 0, 0, time.UTC))
