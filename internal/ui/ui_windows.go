@@ -307,7 +307,7 @@ func (u *UI) openConflicts(id int) {
 
 // newWindow makes one of the tray's windows, logging when it opens and closes. Its background
 // matches the appearance setting, so a page that hasn't loaded (or failed to) isn't a black box.
-// Its title bar has no icon; the taskbar's is set by setIcon once it's shown.
+// Its icons (none in the title bar, the taskbar's by theme) are set by setIcon once it's shown.
 func (u *UI) newWindow(name, title string, width, height int, url string) *application.WebviewWindow {
 	s, _, _ := u.app.Settings()
 	theme := s.Theme()
@@ -318,7 +318,6 @@ func (u *UI) newWindow(name, title string, width, height int, url string) *appli
 	u.opts.Log.Printf("window: open %s", name)
 	w := u.wails.Window.NewWithOptions(application.WebviewWindowOptions{
 		Name: name, Title: title, Width: width, Height: height, MinWidth: 640, MinHeight: 420, URL: url, BackgroundColour: bg,
-		Windows: application.WindowsWindow{DisableIcon: true},
 	})
 	w.OnWindowEvent(events.Common.WindowClosing, func(*application.WindowEvent) { u.opts.Log.Printf("window: closed %s", name) })
 	return w
