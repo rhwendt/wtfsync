@@ -6,34 +6,9 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/rhwendt/wtfsync/internal/collect"
 	"github.com/rhwendt/wtfsync/internal/engine"
 	"github.com/rhwendt/wtfsync/internal/setup"
 )
-
-func TestStatusRows(t *testing.T) {
-	v := View{Flavors: []FlavorView{
-		{Name: "classic", Status: engine.Status{Reachable: true, Base: "s1", Newest: "s1", NewestBy: "NY"}},
-		{Name: "retail", Status: engine.Status{Reachable: true, Newest: "s2", NewestBy: "NJ", LocalChanges: 2}},
-	}}
-	want := []StatusRow{
-		{Flavor: "classic", State: "in sync", Base: "s1", Newest: "s1 from NY", Local: "0 local change(s)"},
-		{Flavor: "retail", State: "NJ has newer settings", Base: "never synced", Newest: "s2 from NJ", Local: "2 local change(s)"},
-	}
-	if got := StatusRows(v); !reflect.DeepEqual(got, want) {
-		t.Fatalf("got  %+v\nwant %+v", got, want)
-	}
-}
-
-func TestAddonRows(t *testing.T) {
-	v := View{Flavors: []FlavorView{{Name: "retail", Status: engine.Status{MissingAddons: []engine.OtherAddons{
-		{Machine: "NJ", Addons: []collect.MissingAddon{{Name: "ElvUI", Folders: []string{"ElvUI", "ElvUI_Options"}, URL: "https://x"}}},
-	}}}}}
-	want := []AddonRow{{Flavor: "retail", Machine: "NJ", Name: "ElvUI", Folders: "ElvUI, ElvUI_Options", URL: "https://x"}}
-	if got := AddonRows(v); !reflect.DeepEqual(got, want) {
-		t.Fatalf("got %+v", got)
-	}
-}
 
 func TestResultLines(t *testing.T) {
 	r := setup.Result{Synced: []setup.FlavorResult{
@@ -54,8 +29,6 @@ func TestResultLines(t *testing.T) {
 // The pages loop over these; JSON null (a nil slice) would throw and leave the window blank.
 func TestEmptyRowsAreEmptyLists(t *testing.T) {
 	for name, v := range map[string]any{
-		"StatusRows":  StatusRows(View{}),
-		"AddonRows":   AddonRows(View{}),
 		"ResultLines": ResultLines(setup.Result{}),
 	} {
 		if b, _ := json.Marshal(v); string(b) != "[]" {

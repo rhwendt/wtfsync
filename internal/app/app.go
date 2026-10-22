@@ -68,6 +68,8 @@ type App struct {
 	mu       sync.Mutex
 	busy     string
 	watching func() // ends the running action's watch
+	tickets  uint64 // Refreshes started
+	shown    uint64 // the Refresh whose results flavors holds
 	closing  bool   // Close was called: no new actions or ticks
 	flavors  map[string]*FlavorView
 	update   *update.Release
@@ -131,7 +133,7 @@ func (a *App) enabled() (*engine.Engine, []wow.Flavor, error) {
 	}
 	var on []wow.Flavor
 	for _, f := range all {
-		if enabled, listed := s.Flavors[f.Name]; enabled || !listed {
+		if s.Enabled(f.Name) {
 			on = append(on, f)
 		}
 	}
@@ -142,11 +144,10 @@ func (a *App) enabled() (*engine.Engine, []wow.Flavor, error) {
 // Refresh reloads every enabled flavor's status. Errors from the last action stay until the
 // next action on that flavor.
 func (a *App) Refresh() {
+	t := a.ticket()
 	eng, flavors, err := a.enabled()
 	if err != nil {
-		a.mu.Lock()
-		a.flavors = map[string]*FlavorView{}
-		a.mu.Unlock()
+		a.keep(t, map[string]*FlavorView{})
 		a.d.Changed()
 		return
 	}
@@ -158,15 +159,36 @@ func (a *App) Refresh() {
 		}
 		fresh[f.Name] = &FlavorView{Name: f.Name, Status: st}
 	}
+	if a.keep(t, fresh) {
+		a.d.Changed()
+	}
+}
+
+// ticket numbers a Refresh, so a slow one that started earlier can't overwrite a later one's
+// results (e.g. the window's refresh on open finishing after a push's).
+func (a *App) ticket() uint64 {
 	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.tickets++
+	return a.tickets
+}
+
+// keep stores Refresh t's results unless a later Refresh already stored its own. Errors from the
+// last action carry over.
+func (a *App) keep(t uint64, fresh map[string]*FlavorView) bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if t < a.shown {
+		return false
+	}
+	a.shown = t
 	for name, fv := range fresh {
 		if old, ok := a.flavors[name]; ok {
 			fv.Err = old.Err
 		}
 	}
 	a.flavors = fresh
-	a.mu.Unlock()
-	a.d.Changed()
+	return true
 }
 
 // Tick runs every 60 s: retry pushes that couldn't reach the sync folder, refresh, and announce
@@ -295,7 +317,13 @@ func stacks() []byte {
 
 // run does one user action: busy state, the per-PC lock, then fn per enabled flavor (or only the
 // flavor named by only). Per-flavor errors are kept on the flavor and raised as notifications.
-func (a *App) run(what, only string, fn func(eng *engine.Engine, f wow.Flavor) error) (err error) {
+func (a *App) run(what, only string, fn func(eng *engine.Engine, f wow.Flavor) error) error {
+	return a.perform(what, only, true, fn)
+}
+
+// perform is run; record false leaves the flavors' errors and notifications alone, for actions that
+// change nothing when they fail (a restore shows its error on the page instead).
+func (a *App) perform(what, only string, record bool, fn func(eng *engine.Engine, f wow.Flavor) error) (err error) {
 	if !a.begin(what) {
 		return ErrBusy
 	}
@@ -325,6 +353,12 @@ func (a *App) run(what, only string, fn func(eng *engine.Engine, f wow.Flavor) e
 			continue
 		}
 		err := fn(eng, f)
+		if !record {
+			if err != nil {
+				errs = append(errs, fmt.Errorf("%s: %w", f.Name, err))
+			}
+			continue
+		}
 		a.mu.Lock()
 		fv, ok := a.flavors[f.Name]
 		if !ok {
@@ -344,12 +378,20 @@ func (a *App) run(what, only string, fn func(eng *engine.Engine, f wow.Flavor) e
 			}
 		}
 	}
+	if only != "" && !slices.ContainsFunc(flavors, func(f wow.Flavor) bool { return f.Name == only }) {
+		return fmt.Errorf("no enabled flavor %q", only)
+	}
 	return errors.Join(errs...)
 }
 
 // Push pushes every enabled flavor.
-func (a *App) Push() error {
-	return a.run("pushing", "", func(eng *engine.Engine, f wow.Flavor) error {
+func (a *App) Push() error { return a.push("") }
+
+// PushFlavor pushes one enabled flavor.
+func (a *App) PushFlavor(name string) error { return a.push(name) }
+
+func (a *App) push(only string) error {
+	return a.run(doing("pushing", only), only, func(eng *engine.Engine, f wow.Flavor) error {
 		_, err := eng.Push(f, engine.Options{})
 		return err
 	})
@@ -357,8 +399,13 @@ func (a *App) Push() error {
 
 // Pull pulls every enabled flavor (retrying a pending push first, as the CLI does) and then
 // announces addons other PCs have that this one doesn't, when that list has grown.
-func (a *App) Pull() error {
-	err := a.run("pulling", "", func(eng *engine.Engine, f wow.Flavor) error {
+func (a *App) Pull() error { return a.pull("") }
+
+// PullFlavor pulls one enabled flavor.
+func (a *App) PullFlavor(name string) error { return a.pull(name) }
+
+func (a *App) pull(only string) error {
+	err := a.run(doing("pulling", only), only, func(eng *engine.Engine, f wow.Flavor) error {
 		a.retryPending(eng, []wow.Flavor{f})
 		_, err := eng.Pull(f, engine.Options{})
 		return err
@@ -375,24 +422,62 @@ func (a *App) Pull() error {
 	return err
 }
 
-// RestorePreview lists what restoring flavor's newest backup would change.
-func (a *App) RestorePreview(flavor string) (engine.RestoreReport, error) {
+// doing is the busy text: "pulling", or "pulling classic" for one flavor.
+func doing(what, only string) string {
+	if only == "" {
+		return what
+	}
+	return what + " " + only
+}
+
+// RestorePreview lists what restoring one of flavor's backup sets (id "" = the newest) would change.
+func (a *App) RestorePreview(flavor, id string) (engine.RestoreReport, error) {
 	eng, f, err := a.flavor(flavor)
 	if err != nil {
 		return engine.RestoreReport{}, err
 	}
-	return eng.Restore(f, "", engine.Options{DryRun: true})
+	rep, err := eng.Restore(f, id, engine.Options{DryRun: true})
+	return rep, gone(err)
 }
 
-// Restore puts flavor's newest backup back (backing up what it replaces, as the CLI does).
-func (a *App) Restore(flavor string) (engine.RestoreReport, error) {
+// Restore puts one of flavor's backup sets back (id "" = the newest), backing up what it replaces.
+func (a *App) Restore(flavor, id string) (engine.RestoreReport, error) {
 	var rep engine.RestoreReport
-	err := a.run("restoring", flavor, func(eng *engine.Engine, f wow.Flavor) error {
+	err := a.perform("restoring "+flavor, flavor, false, func(eng *engine.Engine, f wow.Flavor) error {
 		var err error
-		rep, err = eng.Restore(f, "", engine.Options{})
+		rep, err = eng.Restore(f, id, engine.Options{})
 		return err
 	})
-	return rep, err
+	return rep, gone(err)
+}
+
+// backupGone is a restore of a set that was pruned since the list was shown, in the words the
+// window shows. It still matches local.ErrNoBackup.
+type backupGone struct{ err error }
+
+func (e backupGone) Error() string { return "That backup no longer exists" }
+func (e backupGone) Unwrap() error { return e.err }
+
+func gone(err error) error {
+	if errors.Is(err, local.ErrNoBackup) {
+		return backupGone{err}
+	}
+	return err
+}
+
+// FlavorNames lists the flavors in a WoW folder, sorted; empty when it isn't one. The Settings page
+// uses it when the WoW folder is changed.
+func (a *App) FlavorNames(wowDir string) []string {
+	names := []string{}
+	flavors, err := setup.Flavors(wowDir)
+	if err != nil {
+		return names
+	}
+	for _, f := range flavors {
+		names = append(names, f.Name)
+	}
+	slices.Sort(names)
+	return names
 }
 
 func (a *App) flavor(name string) (*engine.Engine, wow.Flavor, error) {
@@ -429,30 +514,23 @@ func (a *App) Setup(ans setup.Answers) (res setup.Result, err error) {
 	return setup.Run(setup.Env{Store: a.d.Store, Procs: a.d.Procs, Hydrator: a.d.Hydrator, Prompt: a.d.Prompt, Now: a.d.Now}, ans)
 }
 
-// SettingsInput is the settings window's form.
+// SettingsInput is the settings page's form.
 type SettingsInput struct {
 	Name         string
 	WoWDir       string
 	SyncFolder   string
-	Flavors      map[string]bool
+	AllFlavors   bool
+	Flavors      map[string]bool // used when AllFlavors is off
 	StartAtLogin bool
 }
 
-// SaveSettings applies the settings window. Changing folders follows the setup rerun rules; a new
+// SaveSettings applies the settings page. Changing folders follows the setup rerun rules; a new
 // sync folder that already has wtfsync data is joined (link), otherwise this PC starts it (init).
 func (a *App) SaveSettings(in SettingsInput) (setup.Result, error) {
-	s, err := a.d.Store.LoadSettings()
-	if err != nil {
-		return setup.Result{}, err
-	}
-	for name, on := range in.Flavors {
-		s.Flavors[name] = on
-	}
-	if err := a.d.Store.SaveSettings(s); err != nil {
-		return setup.Result{}, err
-	}
+	all := in.AllFlavors
 	_, openErr := syncdir.Open(in.SyncFolder, a.d.Hydrator)
-	res, err := a.Setup(setup.Answers{WoWDir: in.WoWDir, SyncFolder: in.SyncFolder, Name: in.Name, First: openErr != nil})
+	res, err := a.Setup(setup.Answers{WoWDir: in.WoWDir, SyncFolder: in.SyncFolder, Name: in.Name, First: openErr != nil,
+		AllFlavors: &all, Flavors: in.Flavors})
 	if err != nil {
 		return res, err
 	}
@@ -464,16 +542,16 @@ func (a *App) SaveSettings(in SettingsInput) (setup.Result, error) {
 	return res, nil
 }
 
-// CheckUpdate looks for a newer release and offers it in the menu. Failures are only logged:
-// being offline mustn't nag.
-func (a *App) CheckUpdate(ctx context.Context) {
+// CheckUpdate looks for a newer release and offers it. Failures are logged and returned but never
+// raised as notifications: being offline mustn't nag.
+func (a *App) CheckUpdate(ctx context.Context) error {
 	if a.d.Updates == nil {
-		return
+		return nil
 	}
 	r, err := a.d.Updates.Latest(ctx)
 	if err != nil {
 		a.d.Log.Printf("check for updates: %v", err)
-		return
+		return err
 	}
 	a.mu.Lock()
 	if update.Newer(a.d.Version, r.Version) {
@@ -483,6 +561,7 @@ func (a *App) CheckUpdate(ctx context.Context) {
 	}
 	a.mu.Unlock()
 	a.d.Changed()
+	return nil
 }
 
 // InstallUpdate downloads the offered release into dir, waits for any sync to finish, then calls
@@ -547,4 +626,49 @@ func (a *App) StartsAtLogin() bool {
 	}
 	on, err := a.d.Autostart.Enabled()
 	return err == nil && on
+}
+
+// SetAppearance saves this PC's appearance: "system", "light" or "dark".
+func (a *App) SetAppearance(v string) error {
+	switch v {
+	case "system", "light", "dark":
+	default:
+		return fmt.Errorf("unknown appearance %q", v)
+	}
+	s, err := a.d.Store.LoadSettings()
+	if err != nil {
+		return err
+	}
+	s.Appearance = v
+	if err := a.d.Store.SaveSettings(s); err != nil {
+		return err
+	}
+	a.d.Changed()
+	return nil
+}
+
+// CloudFolder is what the wizard needs to know about a cloud folder.
+type CloudFolder struct {
+	HasData bool     // the folder has wtfsync data: this PC joins it unless it's a rerun of the first PC
+	PCs     []string // the other PCs whose records could be read; may be empty even with data
+}
+
+// CloudFolder says whether folder has wtfsync data and names the PCs in it other than this one.
+// Whether to offer "Join" comes from HasData, not PCs: a streaming drive may not have downloaded
+// the other PC's record yet.
+func (a *App) CloudFolder(folder string) CloudFolder {
+	c := CloudFolder{PCs: []string{}}
+	d, err := syncdir.Open(folder, a.d.Hydrator)
+	if err != nil {
+		return c
+	}
+	c.HasData = true
+	me, _ := a.d.Store.LoadSettings()
+	machines, _ := d.Machines()
+	for _, m := range machines {
+		if m.UUID != me.MachineUUID {
+			c.PCs = append(c.PCs, m.Name)
+		}
+	}
+	return c
 }

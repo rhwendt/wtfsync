@@ -23,6 +23,11 @@ type Answers struct {
 	SyncFolder string
 	Name       string
 	First      bool // init: create the sync data and push; otherwise link: join it and pull
+
+	// AllFlavors and Flavors replace the flavor choices (the Settings page); nil AllFlavors keeps
+	// the current ones. They're saved only if the rest of the answers are valid.
+	AllFlavors *bool
+	Flavors    map[string]bool
 }
 
 // Env is what Run needs from outside.
@@ -107,14 +112,24 @@ func Run(env Env, a Answers) (Result, error) {
 		return res, err
 	}
 
-	s := local.Settings{MachineUUID: local.NewUUID(), MachineName: a.Name, SyncFolder: a.SyncFolder, WoWDir: a.WoWDir, Flavors: map[string]bool{}}
+	all := true
+	s := local.Settings{MachineUUID: local.NewUUID(), MachineName: a.Name, SyncFolder: a.SyncFolder, WoWDir: a.WoWDir, Flavors: map[string]bool{}, AllFlavors: &all}
 	if res.Rerun {
 		s.MachineUUID = prev.MachineUUID
 		maps.Copy(s.Flavors, prev.Flavors)
+		s.AllFlavors, s.Appearance = prev.AllFlavors, prev.Appearance
 	}
-	for _, f := range flavors {
-		if _, ok := s.Flavors[f.Name]; !ok {
-			s.Flavors[f.Name] = true
+	if a.AllFlavors != nil {
+		s.AllFlavors = a.AllFlavors
+		maps.Copy(s.Flavors, a.Flavors)
+	}
+	// Listing every flavor found gives the Settings page's switches a starting point. When the
+	// user picks flavors individually, one found later stays off (unlisted).
+	if s.All() {
+		for _, f := range flavors {
+			if _, ok := s.Flavors[f.Name]; !ok {
+				s.Flavors[f.Name] = true
+			}
 		}
 	}
 	if res.Moved {
@@ -138,7 +153,7 @@ func Run(env Env, a Answers) (Result, error) {
 	eng := &engine.Engine{Store: env.Store, Settings: s, Procs: env.Procs, Hydrator: env.Hydrator, Prompt: env.Prompt, Now: env.Now}
 	var errs []error
 	for _, f := range flavors {
-		if !s.Flavors[f.Name] {
+		if !s.Enabled(f.Name) {
 			continue
 		}
 		run := eng.Pull

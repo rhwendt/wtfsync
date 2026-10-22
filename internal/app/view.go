@@ -8,6 +8,7 @@ import (
 	"fmt"
 
 	"github.com/rhwendt/wtfsync/internal/engine"
+	"github.com/rhwendt/wtfsync/internal/local"
 )
 
 // IconState is the tray icon, most severe state across flavors.
@@ -104,6 +105,16 @@ func summarize(v *View) {
 	}
 }
 
+// FirstMissing is the first flavor with missing addons, for the notification's Show; "" if none.
+func FirstMissing(v View) string {
+	for _, f := range v.Flavors {
+		if f.missing() > 0 {
+			return f.Name
+		}
+	}
+	return ""
+}
+
 // MenuItem is one tray menu entry. ID "-" is a separator.
 type MenuItem struct {
 	ID      string
@@ -118,16 +129,11 @@ func Menu(v View) []MenuItem {
 	}
 	idle := v.Busy == ""
 	m := []MenuItem{
+		{"open", "Open wtfsync", true},
 		{"push", "Push", idle},
 		{"pull", "Pull", idle},
-		{"-", "", false},
-		{"status", "Status…", true},
-		{"restore", "Restore last backup…", idle},
+		{"settings", "Settings…", idle},
 	}
-	if v.Missing > 0 {
-		m = append(m, MenuItem{"addons", fmt.Sprintf("Missing addons (%d)…", v.Missing), true})
-	}
-	m = append(m, MenuItem{"settings", "Settings…", idle})
 	if v.Update != "" {
 		m = append(m, MenuItem{"update", "Update to " + v.Update, idle})
 	}
@@ -144,6 +150,8 @@ func friendly(flavor string, err error) string {
 		return fmt.Sprintf("Close WoW (%s) first", flavor)
 	case errors.Is(err, engine.ErrAborted):
 		return "Conflict not resolved; nothing changed"
+	case errors.Is(err, local.ErrNoBackup):
+		return "That backup no longer exists"
 	}
 	return err.Error()
 }

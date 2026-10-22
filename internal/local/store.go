@@ -20,7 +20,41 @@ type Settings struct {
 	MachineName string          `json:"machineName"` // display label only; never identity
 	SyncFolder  string          `json:"syncFolder"`
 	WoWDir      string          `json:"wowDir"`
-	Flavors     map[string]bool `json:"flavors"` // flavor → enabled; flavors not listed count as enabled
+	Flavors     map[string]bool `json:"flavors"` // flavor → on; what syncs when AllFlavors is off
+
+	// AllFlavors syncs every flavor, including ones installed later. nil in settings written
+	// before it existed: see All.
+	AllFlavors *bool  `json:"allFlavors,omitempty"`
+	Appearance string `json:"appearance,omitempty"` // "system" (or ""), "light", "dark"
+}
+
+// All reports whether every flavor syncs. Settings written before AllFlavors existed count as all
+// when no listed flavor was switched off, so nobody's choices change on upgrade.
+func (s Settings) All() bool {
+	if s.AllFlavors != nil {
+		return *s.AllFlavors
+	}
+	for _, on := range s.Flavors {
+		if !on {
+			return false
+		}
+	}
+	return true
+}
+
+// Enabled reports whether flavor syncs. When not all flavors sync, one that isn't listed (installed
+// since) is off until switched on.
+func (s Settings) Enabled(flavor string) bool {
+	return s.All() || s.Flavors[flavor]
+}
+
+// Theme is the appearance to use: "system", "light" or "dark". Anything else reads as system.
+func (s Settings) Theme() string {
+	switch s.Appearance {
+	case "light", "dark":
+		return s.Appearance
+	}
+	return "system"
 }
 
 // FlavorState is what this PC last synced for one flavor: the base of the three-way compare.

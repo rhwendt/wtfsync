@@ -48,10 +48,11 @@ type Prompter interface {
 }
 
 // BatchPrompter is an optional Prompter that settles every conflict in one go (the tray's
-// conflict dialog). firstLink is true when this PC has never synced the flavor. Every path in
-// conflicts must get a choice; a missing one, or an error, writes nothing.
+// conflict dialog). flavor is the one being synced, so the dialog can say which; firstLink is true
+// when this PC has never synced it. Every path in conflicts must get a choice; a missing one, or an
+// error, writes nothing.
 type BatchPrompter interface {
-	Resolve(conflicts []string, other string, firstLink bool) (map[string]Choice, error)
+	Resolve(flavor string, conflicts []string, other string, firstLink bool) (map[string]Choice, error)
 }
 
 type Engine struct {
@@ -157,7 +158,7 @@ func (e *Engine) merge(f wow.Flavor, d *syncdir.Dir, st local.FlavorState, n syn
 		rep.Items = items
 		return st, nil
 	}
-	if items, err = e.resolve(items, st.Base == "", m.Machine.Name); err != nil {
+	if items, err = e.resolve(f.Name, items, st.Base == "", m.Machine.Name); err != nil {
 		return st, err
 	}
 	rep.Items = items
@@ -169,7 +170,10 @@ func (e *Engine) merge(f wow.Flavor, d *syncdir.Dir, st local.FlavorState, n syn
 		}
 	}
 	if len(take) > 0 {
-		if rep.Backup, err = e.Store.Backup(f.Name, f.WTFDir(), take, e.Now()); err != nil {
+		if rep.Backup, err = e.Store.Backup(f.Name, f.WTFDir(), take, e.Now(), local.Why{Reason: local.ReasonPull, From: m.Machine.Name}); err != nil {
+			return st, err
+		}
+		if err := e.Store.PruneBackups(f.Name); err != nil {
 			return st, err
 		}
 		for _, p := range take {
@@ -184,7 +188,7 @@ func (e *Engine) merge(f wow.Flavor, d *syncdir.Dir, st local.FlavorState, n syn
 
 // resolve turns every Conflict into TakeRemote or KeepLocal by asking the Prompter. On a first
 // link it asks once for all conflicts, unless the user picks "ask per file".
-func (e *Engine) resolve(items []Item, firstLink bool, other string) ([]Item, error) {
+func (e *Engine) resolve(flavor string, items []Item, firstLink bool, other string) ([]Item, error) {
 	conflicts := 0
 	for _, it := range items {
 		if it.Action == Conflict {
@@ -195,7 +199,7 @@ func (e *Engine) resolve(items []Item, firstLink bool, other string) ([]Item, er
 		return items, nil
 	}
 	if bp, ok := e.Prompt.(BatchPrompter); ok {
-		return resolveBatch(bp, items, firstLink, other)
+		return resolveBatch(bp, flavor, items, firstLink, other)
 	}
 	all := Conflict // Conflict = ask per file
 	if firstLink {
@@ -248,14 +252,14 @@ func caseClash(local, remote map[string]string) error {
 	return nil
 }
 
-func resolveBatch(bp BatchPrompter, items []Item, firstLink bool, other string) ([]Item, error) {
+func resolveBatch(bp BatchPrompter, flavor string, items []Item, firstLink bool, other string) ([]Item, error) {
 	var paths []string
 	for _, it := range items {
 		if it.Action == Conflict {
 			paths = append(paths, it.Path)
 		}
 	}
-	choices, err := bp.Resolve(paths, other, firstLink)
+	choices, err := bp.Resolve(flavor, paths, other, firstLink)
 	if err != nil {
 		return nil, err
 	}

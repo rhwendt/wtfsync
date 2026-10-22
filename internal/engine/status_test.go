@@ -2,9 +2,12 @@ package engine
 
 import (
 	"errors"
+	"fmt"
 	"path/filepath"
 	"reflect"
 	"testing"
+
+	"github.com/rhwendt/wtfsync/internal/local"
 )
 
 func TestStatus(t *testing.T) {
@@ -19,7 +22,7 @@ func TestStatus(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := Status{Flavor: "retail", Base: s1.String(), Newest: s2.String(), NewestBy: "NJ", Reachable: true, LocalChanges: 2}
+	want := Status{Flavor: "retail", Base: s1.String(), BaseBy: "NJ", Newest: s2.String(), NewestBy: "NJ", Reachable: true, LocalChanges: 2}
 	if !reflect.DeepEqual(st, want) {
 		t.Fatalf("got %+v\nwant %+v", st, want)
 	}
@@ -63,5 +66,50 @@ func TestRestoreRefusedWhileGameRunning(t *testing.T) {
 	v.procs.running = true
 	if _, err := v.eng.Restore(v.flavor, "", Options{}); !errors.Is(err, ErrGameRunning) {
 		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestBackupsSayWhyTheyWereMade(t *testing.T) {
+	v := newEnv(t)
+	s1 := v.remote(1, map[string]string{pathA: "a1"})
+	v.synced(s1, map[string]string{pathA: "a1"})
+	v.writeLocal(pathA, "a1")
+	v.remote(2, map[string]string{pathA: "a2"})
+	if _, err := v.eng.Pull(v.flavor, Options{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := v.eng.Restore(v.flavor, "", Options{}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := v.eng.Store.Backups("retail")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 || got[0].Reason != local.ReasonRestore || got[1].Reason != local.ReasonPull || got[1].From != "NJ" {
+		t.Fatalf("backups %+v", got)
+	}
+}
+
+func TestRestoreOldestOfAFullSetOfBackups(t *testing.T) {
+	v := newEnv(t)
+	v.writeLocal(pathA, "oldest")
+	oldest, err := v.eng.Store.Backup("retail", v.flavor.WTFDir(), []string{pathA}, v.eng.Now(), local.Why{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := range 9 { // fill the store to its 10 kept sets
+		v.writeLocal(pathA, fmt.Sprint("later ", i))
+		if _, err := v.eng.Store.Backup("retail", v.flavor.WTFDir(), []string{pathA}, v.eng.Now(), local.Why{}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	v.writeLocal(pathA, "now")
+	if _, err := v.eng.Restore(v.flavor, oldest, Options{}); err != nil {
+		t.Fatalf("restoring the oldest kept backup: %v", err)
+	}
+	v.want(pathA, "oldest")
+	sets, _ := v.eng.Store.Backups("retail")
+	if len(sets) != 10 || sets[0].Reason != local.ReasonRestore {
+		t.Fatalf("after restore: %d sets, newest %+v", len(sets), sets[0])
 	}
 }

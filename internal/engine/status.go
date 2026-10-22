@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/rhwendt/wtfsync/internal/collect"
+	"github.com/rhwendt/wtfsync/internal/local"
 	"github.com/rhwendt/wtfsync/internal/syncdir"
 	"github.com/rhwendt/wtfsync/internal/wow"
 )
@@ -13,6 +14,7 @@ import (
 type Status struct {
 	Flavor       string
 	Base         string // snapshot last synced; "" = never
+	BaseBy       string // display name of the PC that wrote Base; "" when unknown
 	Newest       string // newest snapshot in the sync folder; "" = none (or unreachable)
 	NewestBy     string // display name of the PC that wrote Newest
 	Reachable    bool
@@ -41,6 +43,11 @@ func (e *Engine) Status(f wow.Flavor) (Status, error) {
 	}
 	s.Reachable = true
 	s.MissingAddons = e.missingAddons(f, d)
+	if b, ok := syncdir.ParseName(s.Base); ok {
+		if m, err := d.Machine(b.UUID); err == nil {
+			s.BaseBy = m.Name
+		}
+	}
 	n, ok, err := d.Newest(f.Name)
 	if err != nil || !ok {
 		return s, err
@@ -83,8 +90,11 @@ func (e *Engine) Restore(f wow.Flavor, id string, opt Options) (RestoreReport, e
 	if opt.DryRun {
 		return rep, nil
 	}
-	if rep.Undo, err = e.Store.Backup(f.Name, f.WTFDir(), paths, e.Now()); err != nil {
+	if rep.Undo, err = e.Store.Backup(f.Name, f.WTFDir(), paths, e.Now(), local.Why{Reason: local.ReasonRestore}); err != nil {
 		return rep, err
 	}
-	return rep, e.Store.Restore(f.Name, id, f.WTFDir())
+	if err := e.Store.Restore(f.Name, id, f.WTFDir()); err != nil {
+		return rep, err
+	}
+	return rep, e.Store.PruneBackups(f.Name) // only now: the set restored may have been the oldest
 }

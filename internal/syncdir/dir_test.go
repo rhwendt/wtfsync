@@ -83,3 +83,20 @@ func TestMachineRecords(t *testing.T) {
 		t.Fatalf("got %+v", got)
 	}
 }
+
+func TestMachinesListsEveryPCByName(t *testing.T) {
+	d, err := Init(t.TempDir(), now, h)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, err := d.Machines(); err != nil || len(got) != 0 {
+		t.Fatalf("empty folder: %v, %v", got, err)
+	}
+	d.WriteMachine(MachineRecord{UUID: "00000000-0000-4000-8000-000000000002", Name: "leviathan", LastSeen: now})
+	d.WriteMachine(MachineRecord{UUID: "00000000-0000-4000-8000-000000000001", Name: "beehive", LastSeen: now})
+	os.WriteFile(filepath.Join(d.Root, "machines", "notes.txt"), []byte("x"), 0o644) // not a record
+	got, err := d.Machines()
+	if err != nil || len(got) != 2 || got[0].Name != "beehive" || got[1].Name != "leviathan" {
+		t.Fatalf("machines %+v, %v", got, err)
+	}
+}

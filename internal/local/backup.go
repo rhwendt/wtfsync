@@ -17,9 +17,32 @@ const (
 	backupLayout = "20060102T150405.000Z"
 )
 
+// ErrNoBackup means the backup set doesn't exist: never made, or pruned since.
+var ErrNoBackup = errors.New("no such backup")
+
+const (
+	ReasonPull    = "pull"    // made before a pull (or a push's merge) overwrote files
+	ReasonRestore = "restore" // made before a restore overwrote files
+)
+
+// Why records what a backup set was made before. Both are empty in backups made before v0.8.
+type Why struct {
+	Reason string `json:"reason,omitempty"` // ReasonPull or ReasonRestore
+	From   string `json:"from,omitempty"`   // the PC pulled from (ReasonPull)
+}
+
 type backupIndex struct {
 	Present []string `json:"present"` // backed-up files, under files/
 	Absent  []string `json:"absent"`  // paths that didn't exist locally at backup time
+	Why
+}
+
+// BackupInfo describes one backup set.
+type BackupInfo struct {
+	ID   string
+	Time time.Time // when it was made, UTC
+	Why
+	Files int // files a restore rewrites or deletes
 }
 
 func (s Store) backupDir(flavor, id string) string {
@@ -28,10 +51,10 @@ func (s Store) backupDir(flavor, id string) string {
 
 // Backup saves the current local version of each WTF-relative path into a new backup set, noting
 // paths that don't exist, and returns the set id. Only the newest 10 sets per flavor are kept.
-func (s Store) Backup(flavor, wtfDir string, paths []string, now time.Time) (string, error) {
+func (s Store) Backup(flavor, wtfDir string, paths []string, now time.Time, why Why) (string, error) {
 	id := now.UTC().Format(backupLayout)
 	dir := s.backupDir(flavor, id)
-	var idx backupIndex
+	idx := backupIndex{Why: why}
 	for _, p := range paths {
 		b, err := os.ReadFile(filepath.Join(wtfDir, filepath.FromSlash(p)))
 		if errors.Is(err, fs.ErrNotExist) {
@@ -49,7 +72,7 @@ func (s Store) Backup(flavor, wtfDir string, paths []string, now time.Time) (str
 	if err := fsutil.WriteJSON(filepath.Join(dir, "index.json"), idx); err != nil {
 		return "", err
 	}
-	return id, s.pruneBackups(flavor)
+	return id, nil
 }
 
 // BackupSets lists a flavor's backup set ids, newest first.
@@ -74,7 +97,27 @@ func (s Store) BackupSets(flavor string) ([]string, error) {
 	return ids, nil
 }
 
-func (s Store) pruneBackups(flavor string) error {
+// Backups lists a flavor's readable backup sets, newest first.
+func (s Store) Backups(flavor string) ([]BackupInfo, error) {
+	ids, err := s.BackupSets(flavor)
+	if err != nil {
+		return nil, err
+	}
+	out := []BackupInfo{}
+	for _, id := range ids {
+		idx, err := s.readIndex(flavor, id)
+		if err != nil {
+			continue // pruned meanwhile, or damaged: list the rest
+		}
+		t, _ := time.Parse(backupLayout, id)
+		out = append(out, BackupInfo{ID: id, Time: t, Why: idx.Why, Files: len(idx.Present) + len(idx.Absent)})
+	}
+	return out, nil
+}
+
+// PruneBackups keeps a flavor's newest 10 backup sets and deletes the rest. Backup doesn't prune by
+// itself, so a restore can make its undo set before the (possibly oldest) set it restores is gone.
+func (s Store) PruneBackups(flavor string) error {
 	ids, err := s.BackupSets(flavor)
 	if err != nil {
 		return err
@@ -132,7 +175,7 @@ func (s Store) readIndex(flavor, id string) (backupIndex, error) {
 	}
 	if err := readJSON(filepath.Join(s.backupDir(flavor, id), "index.json"), &idx); err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			return idx, fmt.Errorf("no backup %q for %s", id, flavor)
+			return idx, fmt.Errorf("%w: %q for %s", ErrNoBackup, id, flavor)
 		}
 		return idx, err
 	}

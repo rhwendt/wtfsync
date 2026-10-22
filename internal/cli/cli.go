@@ -44,7 +44,7 @@ commands:
   push      upload this PC's addon settings
   pull      download the newest addon settings from your other PCs
   status    show sync state for each flavor
-  restore   undo the last pull from its backup (--set <id> for an older one)
+  restore   put back the newest backup's files (--set <id> for an older one)
   version   print wtfsync's version
 
 Run init or link again to change this PC's WoW folder, sync folder or name.
