@@ -42,6 +42,10 @@ body.app { display: flex; flex-direction: column; }
 .top { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: var(--bar); color: #fff; }
 .top .logo { background: #fff; color: var(--bar); border-radius: 4px; padding: 0 5px; font-size: 12px; font-weight: 800; }
 .top .title { font-weight: 600; }
+.toast { position: fixed; top: 52px; right: 14px; width: 270px; z-index: 10; padding: 10px 12px; font-size: 13px;
+  background: var(--bg); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 6px 20px rgba(0, 0, 0, .3); }
+.toast[hidden] { display: none; }
+.toast .row { margin: 8px 0 0; }
 .top .busy { color: #c9d1d9; font-size: 13px; margin-left: 8px; }
 .top button { background: #2b3442; border-color: #3b4656; color: #fff; }
 .body { flex: 1; display: flex; min-height: 0; }

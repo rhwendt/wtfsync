@@ -5,6 +5,9 @@ import { wizard } from "./wizard.js";
 const KEY = "wtfsync.flavor";
 const remembered = () => { try { return localStorage.getItem(KEY) || ""; } catch { return ""; } };
 const remember = (f) => { try { localStorage.setItem(KEY, f); } catch { /* not kept: fine */ } };
+// The update the toast's Later was clicked for: it stays hidden until a newer one is on offer.
+const LATER = "wtfsync.updateLater";
+const later = () => { try { return localStorage.getItem(LATER) || ""; } catch { return ""; } };
 
 let data = null;                              // MainPage from Go
 let view = params.get("view") || "flavor";    // "flavor", "settings" or "wizard"
@@ -14,6 +17,7 @@ let wizardShown = false;
 const picked = {};                            // flavor → chosen backup id
 let confirming = null;                        // {flavor, id, paths} while a restore is being confirmed
 let note = null;                              // {text, error} shown above the page
+let installing = false;                       // Update now was clicked; until the next load
 
 const show = (...children) => $("#page").replaceChildren(...children);
 const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
@@ -26,6 +30,7 @@ async function load() {
     return drawNote();
   }
   applyTheme(data.Appearance);
+  installing = false; // from here data.Busy says whether the update is still going
   if (!data.SetUp && view !== "wizard") view = "wizard";
   render();
 }
@@ -52,12 +57,38 @@ function render() {
   $("#pullAll").disabled = $("#pushAll").disabled = busy || !data.SetUp;
   document.body.classList.toggle("wizard-mode", view === "wizard");
   drawNote();
+  drawToast();
   if (view === "wizard") return startWizard();
   wizardShown = false;
   renderList();
   if (view === "settings") return settingsPage();
   settingsShown = false;
   flavorPage();
+}
+
+// update starts installing the offered version. If it can't start (a sync is running), the next
+// load shows the toast as it was; a failed download is reported as a notification.
+function update() {
+  installing = true;
+  drawToast();
+  call("InstallUpdate");
+  setTimeout(load, 1500);
+}
+
+// drawToast offers an update in the corner while one is waiting, unless Later was clicked for it.
+// The window and tray restart once it's installed.
+function drawToast() {
+  const v = data.Update;
+  const t = $("#toast");
+  const busy = installing || data.Busy === "updating";
+  t.hidden = !v || view === "wizard" || (later() === v && !busy);
+  if (t.hidden) return;
+  t.replaceChildren(
+    h("b", {}, "Update available"),
+    h("div", { class: "muted" }, busy ? `Installing ${v}… wtfsync restarts when it's done.` : `wtfsync ${v} is ready to install.`),
+    h("div", { class: "row" },
+      h("button", { class: "primary", disabled: busy, onclick: update }, "Update now"),
+      h("button", { disabled: busy, onclick: () => { try { localStorage.setItem(LATER, v); } catch { /* shown again next time */ } t.hidden = true; } }, "Later")));
 }
 
 function go(to) {
@@ -174,7 +205,7 @@ async function settingsPage() {
   const updateBtn = h("span", {});
   const drawUpdate = () => {
     about.textContent = aboutText();
-    updateBtn.replaceChildren(data.Update ? h("button", { class: "primary", onclick: () => call("InstallUpdate") }, "Update to " + data.Update) : "");
+    updateBtn.replaceChildren(data.Update ? h("button", { class: "primary", onclick: update }, "Update to " + data.Update) : "");
   };
   drawUpdate();
   const checkUpdates = async () => {

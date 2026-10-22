@@ -222,3 +222,4 @@ builds `dist/wtfsync.exe`, `dist/wtfsync-tray.exe`, `dist/wtfsync-setup.exe` and
 14. Badges on both PCs match reality: ✓, ↑ N after editing a file, ↓ after the other PC pushes, `new` for a flavor never synced.
 15. Restore an older backup (not the newest), then restore the "before restore" backup to undo it.
 16. Appearance Light / Dark / System, including Windows switching theme while the window is open.
+17. An update on offer: the toast shows when the window opens; **Later** hides it until the next version; **Update now** installs and the tray comes back.
