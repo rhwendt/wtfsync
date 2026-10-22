@@ -15,7 +15,8 @@ tray stays as the always-running entry point.
 
 **Success:** clicking the tray icon opens a window that shows at a glance whether each flavor is in
 sync; from it you can push, pull, restore any of the kept backups, see missing addons, change
-settings (including light/dark), and run setup — without the tray menu.
+settings (including light/dark), and run setup — without the tray menu. The README shows what the
+app looks like and documents every command.
 
 ## Decisions
 
@@ -146,9 +147,37 @@ new time wording but doesn't have to.
   Dark / System, including Windows switching theme while open; wizard on a fresh PC; conflict
   dialog while the window is hidden.
 
+## Documentation
+
+The README is the front page for people deciding whether to install wtfsync, so it shows the app
+and documents the command.
+
+**Screenshots.** The README opens with a screenshot of the main window, and the Tray app section
+shows the flavor page, Settings, the wizard and the conflict dialog, each in light mode, plus one
+dark-mode shot. They're generated, not hand-taken, so they can be refreshed whenever the UI changes:
+
+- **Demo mode.** `main.html` and `conflicts.html` opened with `?demo` load their data from
+  `web/demo.js` (the same shapes the Bridge returns: four flavors in different states, backups,
+  missing addons, one conflict) instead of calling Go. Demo mode is never used by the app itself;
+  `app.js` only switches to it when the page is opened outside Wails with `?demo`.
+- **Script.** `.github/scripts/screenshots.sh` serves `internal/ui/web` locally and captures each
+  view with headless Chrome at a fixed size (1000×640, 2× scale) into `docs/screenshots/*.png`.
+  The PNGs are committed; the README links them.
+- **CI.** On PRs that touch `internal/ui/web`, the build job runs the script and uploads the
+  PNGs as an artifact, so a UI change can be reviewed from the images. Committing the refreshed
+  PNGs stays a manual step (CI doesn't push to branches).
+
+**CLI reference.** A **Command reference** section in the README lists every command (`init`,
+`link`, `push`, `pull`, `status`, `restore`, `version`) with what it does, an example, and its
+flags; the global flags in one table; the exit codes (0 ok; 1 error; 2 refused: WoW running, a
+snapshot not downloaded yet, or another sync running; 3 conflict aborted). A test in
+`internal/cli` checks that every command and flag in the CLI's usage text appears in the README's
+Command reference, so the two can't drift apart.
+
 ## Out of scope
 
 - Addon sync (next design).
 - Changing how many backups or snapshots are kept (10 / 20, fixed).
 - Showing file-level diffs inside a backup or conflict.
 - Leaving Wails; macOS/Linux UI.
+- Screenshots of the CLI (the reference is text).
