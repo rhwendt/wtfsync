@@ -71,11 +71,12 @@ body.wizard-mode .list, body.wizard-mode .top button { display: none; }
 /* Flavor page */
 .head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
 .head h1 { font-size: 20px; }
-.backups { display: grid; gap: 4px; }
-.backup { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 6px; cursor: pointer; }
-.backup.on { border-color: var(--accent); background: var(--sel); }
+.points { display: grid; gap: 4px; max-height: 220px; overflow-y: auto; padding-right: 2px; }
+.point { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 6px; cursor: pointer; }
+.point.on { border-color: var(--accent); background: var(--sel); }
+.point.current { cursor: default; }
+.point .tag { font-size: 11px; font-weight: 600; color: var(--muted); border: 1px solid var(--line); border-radius: 10px; padding: 0 7px; }
 .confirm { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
-.files { margin: 6px 0; padding-left: 20px; max-height: 160px; overflow-y: auto; }
 
 /* Settings */
 .field { display: flex; align-items: center; gap: 8px; margin: 6px 0; }

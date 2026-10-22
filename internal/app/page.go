@@ -131,7 +131,7 @@ func statusLine(s engine.Status, now time.Time) string {
 	newest, hasNewest := syncdir.ParseName(s.Newest)
 	switch {
 	case !hasBase && hasNewest:
-		return fmt.Sprintf("Never synced · %s pushed %s", s.NewestBy, when(newest.Time, now))
+		return fmt.Sprintf("Never synced · %s synced %s", s.NewestBy, when(newest.Time, now))
 	case !hasBase:
 		return "Never synced"
 	case !hasNewest:
@@ -141,7 +141,7 @@ func statusLine(s engine.Status, now time.Time) string {
 	case s.Base == s.Newest:
 		return "Last synced " + when(base.Time, now)
 	}
-	return fmt.Sprintf("Last synced %s · %s pushed %s", when(base.Time, now), s.NewestBy, when(newest.Time, now))
+	return fmt.Sprintf("Last synced %s · %s synced %s", when(base.Time, now), s.NewestBy, when(newest.Time, now))
 }
 
 // when is t in now's time zone, as a person would say it.

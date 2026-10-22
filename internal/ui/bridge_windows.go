@@ -85,22 +85,11 @@ func (b *Bridge) AnswerConflicts(id int, choices map[string]string, cancel bool)
 // Main is the main window's data.
 func (b *Bridge) Main() app.MainPage { return b.u.app.Main() }
 
-func (b *Bridge) PushAll() error               { return b.u.app.Push() }
-func (b *Bridge) PullAll() error               { return b.u.app.Pull() }
-func (b *Bridge) PushFlavor(name string) error { return b.u.app.PushFlavor(name) }
-func (b *Bridge) PullFlavor(name string) error { return b.u.app.PullFlavor(name) }
+func (b *Bridge) SyncAll() error               { return b.u.app.Sync() }
+func (b *Bridge) SyncFlavor(name string) error { return b.u.app.SyncFlavor(name) }
 
-// RestorePreview lists the files restoring backup id of flavor would rewrite or remove.
-func (b *Bridge) RestorePreview(flavor, id string) ([]string, error) {
-	r, err := b.u.app.RestorePreview(flavor, id)
-	return list(r.Paths), err
-}
-
-// Restore puts backup id of flavor back and returns the id of the backup of what it replaced.
-func (b *Bridge) Restore(flavor, id string) (string, error) {
-	r, err := b.u.app.Restore(flavor, id)
-	return r.Undo, err
-}
+// RestorePoint puts flavor back as it was at snapshot name.
+func (b *Bridge) RestorePoint(flavor, name string) error { return b.u.app.RestorePoint(flavor, name) }
 
 func (b *Bridge) SetAppearance(v string) error              { return b.u.app.SetAppearance(v) }
 func (b *Bridge) CheckUpdate() error                        { return b.u.app.CheckUpdate(context.Background()) }

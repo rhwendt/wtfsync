@@ -101,7 +101,7 @@ func Run(d app.Deps, o Options) error {
 
 // loop runs for the tray's lifetime (started by Bridge.ServiceStartup once Wails is up).
 func (u *UI) loop(ctx context.Context) {
-	u.notes.RegisterNotificationCategory(notifications.NotificationCategory{ID: "pull", Actions: []notifications.NotificationAction{{ID: "pull", Title: "Pull"}}})
+	u.notes.RegisterNotificationCategory(notifications.NotificationCategory{ID: "sync", Actions: []notifications.NotificationAction{{ID: "sync", Title: "Sync"}}})
 	u.notes.RegisterNotificationCategory(notifications.NotificationCategory{ID: "addons", Actions: []notifications.NotificationAction{{ID: "addons", Title: "Show"}}})
 	u.notes.OnNotificationResponse(func(r notifications.NotificationResult) {
 		if r.Error != nil {
@@ -169,10 +169,8 @@ func (u *UI) logHealth(h *diag.Health) {
 func (u *UI) do(id string) {
 	u.opts.Log.Printf("menu: %s", id)
 	switch id {
-	case "push":
-		go u.app.Push()
-	case "pull":
-		go u.app.Pull()
+	case "sync":
+		go u.app.Sync()
 	case "update":
 		go u.installUpdate()
 	case "quit":

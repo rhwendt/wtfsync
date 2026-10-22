@@ -64,10 +64,10 @@ func TestStatusLine(t *testing.T) {
 		want string
 	}{
 		{engine.Status{}, "Never synced"},
-		{engine.Status{Newest: oct20, NewestBy: "leviathan"}, "Never synced · leviathan pushed Oct 20, 03:51"},
+		{engine.Status{Newest: oct20, NewestBy: "leviathan"}, "Never synced · leviathan synced Oct 20, 03:51"},
 		{engine.Status{Base: today, BaseBy: "leviathan", Newest: today, NewestBy: "leviathan"}, "Last synced today 03:51 · newest from leviathan"},
 		{engine.Status{Base: today, Newest: today}, "Last synced today 03:51"},
-		{engine.Status{Base: oct19, BaseBy: "beehive", Newest: oct20, NewestBy: "leviathan"}, "Last synced Oct 19, 02:07 · leviathan pushed Oct 20, 03:51"},
+		{engine.Status{Base: oct19, BaseBy: "beehive", Newest: oct20, NewestBy: "leviathan"}, "Last synced Oct 19, 02:07 · leviathan synced Oct 20, 03:51"},
 		{engine.Status{Base: oct19}, "Last synced Oct 19, 02:07"}, // cloud folder unreachable: no newest
 	} {
 		if got := statusLine(tt.s, now); got != tt.want {

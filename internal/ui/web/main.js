@@ -1,5 +1,5 @@
 // The main window: flavor list, the selected flavor's page, Settings, and the setup wizard.
-import { $, h, call, on, close, applyTheme, errorText, plural, openURL, params, folderPicker } from "./app.js";
+import { $, h, call, on, close, applyTheme, errorText, openURL, params, folderPicker } from "./app.js";
 import { wizard } from "./wizard.js";
 
 const KEY = "wtfsync.flavor";
@@ -14,8 +14,8 @@ let view = params.get("view") || "flavor";    // "flavor", "settings" or "wizard
 let flavor = params.get("flavor") || remembered();
 let settingsShown = false;                    // the settings form is built (rebuilding would lose edits)
 let wizardShown = false;
-const picked = {};                            // flavor → chosen backup id
-let confirming = null;                        // {flavor, id, paths} while a restore is being confirmed
+const picked = {};                            // flavor → chosen restore point (snapshot name)
+let confirming = null;                        // {flavor, name} while a restore is being confirmed
 let note = null;                              // {text, error} shown above the page
 let installing = false;                       // Update now was clicked; until the next load
 
@@ -54,7 +54,7 @@ function drawNote() {
 function render() {
   const busy = data.Busy !== "";
   $("#busy").textContent = busy ? cap(data.Busy) + "…" : "";
-  $("#pullAll").disabled = $("#pushAll").disabled = busy || !data.SetUp;
+  $("#syncAll").disabled = busy || !data.SetUp;
   document.body.classList.toggle("wizard-mode", view === "wizard");
   drawNote();
   drawToast();
@@ -115,44 +115,42 @@ function flavorPage() {
   const busy = data.Busy !== "";
   show(
     h("div", { class: "head" }, h("h1", {}, f.Name), h("span", { class: "grow" }),
-      h("button", { disabled: busy, onclick: () => run(() => call("PullFlavor", f.Name)) }, "Pull"),
-      h("button", { class: "primary", disabled: busy, onclick: () => run(() => call("PushFlavor", f.Name)) }, "Push")),
+      h("button", { class: "primary", disabled: busy, onclick: () => run(() => call("SyncFlavor", f.Name)) }, "Sync")),
     h("div", {}, h("span", { class: "badge wide " + f.Badge.Kind }, f.Badge.Words)),
     h("p", { class: "muted" }, f.Line),
-    h("h2", {}, "Backups"), backups(f, busy),
+    h("h2", {}, "Restore points"), points(f, busy),
     h("h2", {}, "Missing addons"), missing(f));
 }
 
-function backups(f, busy) {
+function points(f, busy) {
   if (confirming && confirming.flavor === f.Name) return confirmRestore(f);
-  if (f.Backups.length === 0) return h("p", { class: "muted" }, "No backups yet. One is made each time a pull or restore changes files here.");
-  if (!f.Backups.some((b) => b.ID === picked[f.Name])) picked[f.Name] = f.Backups[0].ID;
+  if (f.Unreachable) return h("p", { class: "muted" }, "Can't reach the cloud folder, so restore points can't be listed.");
+  if (f.Points.length === 0) return h("p", { class: "muted" }, "Nothing synced yet. A restore point is added each time you sync changes.");
+  const choosable = f.Points.filter((p) => !p.Current);
+  if (!choosable.some((p) => p.Name === picked[f.Name])) picked[f.Name] = choosable.length ? choosable[0].Name : "";
   return h("div", {},
-    h("div", { class: "backups" }, f.Backups.map((b) =>
-      h("label", { class: "backup" + (b.ID === picked[f.Name] ? " on" : "") },
-        h("input", { type: "radio", name: "backup", checked: b.ID === picked[f.Name], onchange: () => { picked[f.Name] = b.ID; render(); } }),
-        h("span", { class: "grow" }, b.When, b.Reason ? " · " + b.Reason : ""),
-        h("span", { class: "muted" }, plural(b.Files, "file"))))),
+    h("div", { class: "points" }, f.Points.map((p) =>
+      h("label", { class: "point" + (p.Current ? " current" : "") + (p.Name === picked[f.Name] ? " on" : "") },
+        h("input", { type: "radio", name: "point", disabled: p.Current, checked: p.Name === picked[f.Name], onchange: () => { picked[f.Name] = p.Name; render(); } }),
+        h("span", { class: "grow" }, p.When, " · from ", p.From),
+        p.Current ? h("span", { class: "tag" }, "current") : ""))),
     h("div", { class: "row" },
-      h("span", { class: "muted grow" }, "Puts those files back as they were then. What's there now is backed up first."),
-      h("button", { disabled: busy, onclick: () => run(async () => {
-        const id = picked[f.Name];
-        confirming = { flavor: f.Name, id, paths: await call("RestorePreview", f.Name, id) };
-      }) }, "Restore…")));
+      h("span", { class: "muted grow" }, "Puts this flavor's settings back as they were then. What's there now is saved first."),
+      h("button", { disabled: busy || !picked[f.Name], onclick: () => { confirming = { flavor: f.Name, name: picked[f.Name] }; render(); } }, "Restore…")));
 }
 
 function confirmRestore(f) {
   const c = confirming;
-  const b = f.Backups.find((x) => x.ID === c.id);
+  const p = f.Points.find((x) => x.Name === c.name);
+  const at = p ? `${p.When} from ${p.From}` : "then";
   return h("div", { class: "confirm" },
-    h("p", {}, `Restore ${plural(c.paths.length, "file")} as they were ${b ? b.When : "then"}?`),
-    h("ul", { class: "files" }, c.paths.map((p) => h("li", {}, h("code", {}, p)))),
+    h("p", {}, `Restore ${f.Name} to ${at}? Your current files are saved first. Sync afterwards to send this to your other PCs.`),
     h("div", { class: "row end" },
       h("button", { onclick: () => { confirming = null; render(); } }, "Cancel"),
       h("button", { class: "primary", disabled: data.Busy !== "", onclick: () => run(async () => {
         confirming = null;
-        picked[f.Name] = await call("Restore", f.Name, c.id);
-        note = { text: "Restored. What was there before is the backup now selected, so you can put it back." };
+        await call("RestorePoint", f.Name, c.name);
+        note = { text: "Restored. Sync to send it to your other PCs; to undo, restore the newest point." };
       }) }, "Restore")));
 }
 
@@ -258,8 +256,7 @@ function startWizard() {
   });
 }
 
-$("#pullAll").onclick = () => run(() => call("PullAll"));
-$("#pushAll").onclick = () => run(() => call("PushAll"));
+$("#syncAll").onclick = () => run(() => call("SyncAll"));
 $("#gear").onclick = () => go("settings");
 
 let pending = null; // coalesce bursts of "changed" (a sync emits several)
