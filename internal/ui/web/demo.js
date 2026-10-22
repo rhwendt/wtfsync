@@ -2,7 +2,7 @@
 const p = new URLSearchParams(location.search);
 
 const main = {
-  SetUp: true, Busy: "", PC: "desktop", Version: "v0.8.0", Update: "", Appearance: p.get("theme") || "system",
+  SetUp: true, Busy: "", PC: "desktop", Version: "v0.8.0", Update: p.has("update") ? "v0.10.0" : "", Appearance: p.get("theme") || "system",
   Flavors: [
     { Name: "classic", Badge: { Kind: "ok", Short: "✓", Words: "In sync" },
       Line: "Last synced Oct 19, 02:07 · newest from laptop",
