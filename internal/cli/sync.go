@@ -12,7 +12,7 @@ import (
 	"github.com/rhwendt/wtfsync/internal/wow"
 )
 
-// sync runs push, pull, status, or restore for each selected flavor.
+// sync runs sync, push, pull, status, or restore for each selected flavor.
 func (c *cmd) sync(op string, args []string) error {
 	fl, err := c.parse(op, args)
 	if err != nil {
@@ -63,16 +63,16 @@ func (c *cmd) sync(op string, args []string) error {
 
 func (c *cmd) one(eng *engine.Engine, op string, f wow.Flavor, fl flags, opt engine.Options) error {
 	switch op {
-	case "push", "pull":
-		run := eng.Push
+	case "sync", "push", "pull":
+		run, verb := eng.Push, "push" // sync is push: push merges what other PCs pushed first
 		if op == "pull" {
-			run = eng.Pull
+			run, verb = eng.Pull, "pull"
 		}
 		r, err := run(f, opt)
 		if err != nil {
 			return err
 		}
-		printReport(c.out, op, r, opt.DryRun)
+		printReport(c.out, verb, r, opt.DryRun)
 	case "status":
 		st, err := eng.Status(f)
 		if err != nil {

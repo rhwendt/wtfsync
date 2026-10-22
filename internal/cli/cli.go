@@ -1,4 +1,5 @@
-// Package cli implements the wtfsync command line: setup (init, link) and push, pull, status, restore.
+// Package cli implements the wtfsync command line: setup (init, link) and sync, push, pull, status,
+// restore.
 package cli
 
 import (
@@ -41,7 +42,8 @@ const usage = `usage: wtfsync <command> [flags]
 commands:
   init      set up the first PC: pick the sync folder, then push
   link      set up another PC on the same sync folder, then pull
-  push      upload this PC's addon settings
+  sync      get your other PCs' changes, then upload this PC's (what the app's Sync does)
+  push      upload this PC's addon settings (same as sync)
   pull      download the newest addon settings from your other PCs
   status    show sync state for each flavor
   restore   put back the newest backup's files (--set <id> for an older one)
@@ -79,7 +81,7 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer, deps Deps) in
 		err = c.setup(args[1:], true)
 	case "link":
 		err = c.setup(args[1:], false)
-	case "push", "pull", "status", "restore":
+	case "sync", "push", "pull", "status", "restore":
 		err = c.sync(args[0], args[1:])
 	case "version", "--version":
 		fmt.Fprintln(stdout, "wtfsync", cmp.Or(deps.Version, "dev"))

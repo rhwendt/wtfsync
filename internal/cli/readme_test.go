@@ -26,7 +26,7 @@ func usageNames(u string) (cmds, flags []string) {
 
 func TestUsageNamesFindsEverything(t *testing.T) {
 	cmds, flags := usageNames(usage)
-	if len(cmds) != 7 || cmds[0] != "init" || len(flags) != 7 || flags[0] != "--flavor" {
+	if len(cmds) != 8 || cmds[0] != "init" || len(flags) != 7 || flags[0] != "--flavor" {
 		t.Fatalf("commands %v, flags %v", cmds, flags)
 	}
 }

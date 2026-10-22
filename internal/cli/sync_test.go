@@ -18,6 +18,17 @@ func TestPushPullRoundTrip(t *testing.T) {
 	contains(t, ny.mustRun("pull"), "retail: up to date")
 }
 
+func TestSyncGetsTheOtherPCsChangesAndSendsItsOwn(t *testing.T) {
+	nj, ny := linkedPair(t, map[string]string{svA: "a0"})
+	nj.write(svA, "a1")
+	nj.mustRun("sync")
+	ny.write(svB, "b-ny")
+	contains(t, ny.mustRun("sync"), "retail: pushed 000003_")
+	ny.want(svA, "a1")
+	nj.mustRun("sync")
+	nj.want(svB, "b-ny")
+}
+
 func TestPushRefusedWhileGameRunning(t *testing.T) {
 	nj, _ := linkedPair(t, map[string]string{svA: "a0"})
 	nj.procs.running = true
