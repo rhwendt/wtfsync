@@ -124,7 +124,7 @@ func (c *cmd) retryPending(eng *engine.Engine, flavors []wow.Flavor) {
 }
 
 // selectFlavors returns the installed flavors to act on: just name if given, else every enabled
-// flavor. Flavors installed after setup aren't in settings yet and count as enabled.
+// flavor (local.Settings.Enabled).
 func selectFlavors(s local.Settings, name string) ([]wow.Flavor, error) {
 	all, err := wow.Flavors(s.WoWDir)
 	if err != nil {
@@ -140,7 +140,7 @@ func selectFlavors(s local.Settings, name string) ([]wow.Flavor, error) {
 			}
 			continue
 		}
-		if enabled, known := s.Flavors[f.Name]; !known || enabled {
+		if s.Enabled(f.Name) {
 			out = append(out, f)
 		}
 	}

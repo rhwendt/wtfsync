@@ -131,7 +131,7 @@ func (a *App) enabled() (*engine.Engine, []wow.Flavor, error) {
 	}
 	var on []wow.Flavor
 	for _, f := range all {
-		if enabled, listed := s.Flavors[f.Name]; enabled || !listed {
+		if s.Enabled(f.Name) {
 			on = append(on, f)
 		}
 	}
@@ -429,22 +429,24 @@ func (a *App) Setup(ans setup.Answers) (res setup.Result, err error) {
 	return setup.Run(setup.Env{Store: a.d.Store, Procs: a.d.Procs, Hydrator: a.d.Hydrator, Prompt: a.d.Prompt, Now: a.d.Now}, ans)
 }
 
-// SettingsInput is the settings window's form.
+// SettingsInput is the settings page's form.
 type SettingsInput struct {
 	Name         string
 	WoWDir       string
 	SyncFolder   string
-	Flavors      map[string]bool
+	AllFlavors   bool
+	Flavors      map[string]bool // used when AllFlavors is off
 	StartAtLogin bool
 }
 
-// SaveSettings applies the settings window. Changing folders follows the setup rerun rules; a new
+// SaveSettings applies the settings page. Changing folders follows the setup rerun rules; a new
 // sync folder that already has wtfsync data is joined (link), otherwise this PC starts it (init).
 func (a *App) SaveSettings(in SettingsInput) (setup.Result, error) {
 	s, err := a.d.Store.LoadSettings()
 	if err != nil {
 		return setup.Result{}, err
 	}
+	s.AllFlavors = &in.AllFlavors
 	for name, on := range in.Flavors {
 		s.Flavors[name] = on
 	}

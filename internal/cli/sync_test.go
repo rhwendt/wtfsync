@@ -46,6 +46,8 @@ func TestNewFlavorIncludedDisabledFlavorSkipped(t *testing.T) {
 
 	store := local.Store{Dir: nj.dataDir}
 	s, _ := store.LoadSettings()
+	off := false
+	s.AllFlavors = &off
 	s.Flavors["classic"] = false
 	store.SaveSettings(s)
 	os.WriteFile(classic, []byte("b2"), 0o644)

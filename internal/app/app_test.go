@@ -226,11 +226,11 @@ func TestSaveSettingsRenamesTogglesAndStartsAtLogin(t *testing.T) {
 func TestSaveSettingsNewEmptyFolderStartsItNewFolderWithDataJoinsIt(t *testing.T) {
 	nj, ny, _, nyApp := linked(t)
 	fresh := t.TempDir()
-	res, err := nyApp.SaveSettings(SettingsInput{Name: "NY", WoWDir: ny.wowDir, SyncFolder: fresh})
+	res, err := nyApp.SaveSettings(SettingsInput{Name: "NY", WoWDir: ny.wowDir, SyncFolder: fresh, AllFlavors: true})
 	if err != nil || !res.Moved || len(res.Synced) != 1 || res.Synced[0].Report.Snapshot == "" {
 		t.Fatalf("empty folder: %+v, %v", res, err) // NY started it and pushed
 	}
-	res, err = nyApp.SaveSettings(SettingsInput{Name: "NY", WoWDir: ny.wowDir, SyncFolder: nj.sync})
+	res, err = nyApp.SaveSettings(SettingsInput{Name: "NY", WoWDir: ny.wowDir, SyncFolder: nj.sync, AllFlavors: true})
 	if err != nil || !res.Moved || len(res.Synced) != 1 || res.Synced[0].Report.Snapshot != "" {
 		t.Fatalf("folder with data: %+v, %v", res, err) // NY joined it and pulled
 	}
@@ -371,4 +371,23 @@ func TestCloseGivesUpAfterItsWait(t *testing.T) {
 		t.Fatal("Close reported idle while an action was still running")
 	}
 	nyApp.end()
+}
+
+func TestSaveSettingsAllFlavorsOffKeepsALaterFlavorOff(t *testing.T) {
+	_, ny, _, nyApp := linked(t)
+	if _, err := nyApp.SaveSettings(SettingsInput{Name: "NY", WoWDir: ny.wowDir, SyncFolder: ny.sync, Flavors: map[string]bool{"retail": true}}); err != nil {
+		t.Fatal(err)
+	}
+	os.MkdirAll(filepath.Join(ny.wowDir, "_classic_", "WTF", "Account"), 0o755) // installed later
+	nyApp.Refresh()
+	if v := nyApp.View(); len(v.Flavors) != 1 || v.Flavors[0].Name != "retail" {
+		t.Fatalf("flavors %+v, want only retail", v.Flavors)
+	}
+	if _, err := nyApp.SaveSettings(SettingsInput{Name: "NY", WoWDir: ny.wowDir, SyncFolder: ny.sync, AllFlavors: true}); err != nil {
+		t.Fatal(err)
+	}
+	nyApp.Refresh()
+	if v := nyApp.View(); len(v.Flavors) != 2 {
+		t.Fatalf("flavors %+v, want classic and retail", v.Flavors)
+	}
 }

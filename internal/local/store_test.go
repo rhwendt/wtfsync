@@ -44,3 +44,39 @@ func TestNewUUID(t *testing.T) {
 		t.Fatalf("NewUUID = %s, %s", a, b)
 	}
 }
+
+func TestAllAndEnabled(t *testing.T) {
+	on, off := true, false
+	for _, tt := range []struct {
+		name    string
+		s       Settings
+		all     bool
+		enabled map[string]bool // flavor → want
+	}{
+		{"all on", Settings{AllFlavors: &on, Flavors: map[string]bool{"retail": false}}, true,
+			map[string]bool{"retail": true, "classic": true}},
+		{"all off picks", Settings{AllFlavors: &off, Flavors: map[string]bool{"retail": true, "classic": false}}, false,
+			map[string]bool{"retail": true, "classic": false, "classic_era": false}},
+		{"old file, nothing off", Settings{Flavors: map[string]bool{"retail": true}}, true,
+			map[string]bool{"retail": true, "classic": true}},
+		{"old file, one off", Settings{Flavors: map[string]bool{"retail": true, "classic": false}}, false,
+			map[string]bool{"retail": true, "classic": false, "classic_era": false}},
+	} {
+		if got := tt.s.All(); got != tt.all {
+			t.Errorf("%s: All() = %v, want %v", tt.name, got, tt.all)
+		}
+		for f, want := range tt.enabled {
+			if got := tt.s.Enabled(f); got != want {
+				t.Errorf("%s: Enabled(%s) = %v, want %v", tt.name, f, got, want)
+			}
+		}
+	}
+}
+
+func TestThemeDefaultsToSystem(t *testing.T) {
+	for in, want := range map[string]string{"": "system", "system": "system", "light": "light", "dark": "dark", "purple": "system"} {
+		if got := (Settings{Appearance: in}).Theme(); got != want {
+			t.Errorf("Theme(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

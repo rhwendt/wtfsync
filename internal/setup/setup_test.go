@@ -83,6 +83,8 @@ func TestRerunKeepsDisabledFlavorsOff(t *testing.T) {
 	p, sync := newPC(t), t.TempDir()
 	first, _ := Run(p.env, p.answers(sync, true))
 	s := first.Settings
+	off := false
+	s.AllFlavors = &off
 	s.Flavors["retail"] = false
 	p.env.Store.SaveSettings(s)
 	res, err := Run(p.env, p.answers(t.TempDir(), true)) // moved: would push, but retail is off
@@ -159,3 +161,24 @@ type abort struct{}
 
 func (abort) FirstLink(int, string) (engine.FirstLinkChoice, error) { return 0, engine.ErrAborted }
 func (abort) Conflict(string, string) (engine.Choice, error)        { return 0, engine.ErrAborted }
+
+func TestFirstSetupSyncsAllFlavorsAndRerunKeepsAppearance(t *testing.T) {
+	p, sync := newPC(t), t.TempDir()
+	first, err := Run(p.env, p.answers(sync, true))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.Settings.AllFlavors == nil || !*first.Settings.AllFlavors {
+		t.Fatalf("first setup: allFlavors = %v, want true", first.Settings.AllFlavors)
+	}
+	s := first.Settings
+	s.Appearance = "dark"
+	p.env.Store.SaveSettings(s)
+	res, err := Run(p.env, p.answers(sync, true))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Settings.Appearance != "dark" || !res.Settings.All() {
+		t.Fatalf("rerun settings %+v", res.Settings)
+	}
+}
