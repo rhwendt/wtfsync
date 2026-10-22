@@ -62,6 +62,11 @@ type FlavorState struct {
 	Base        string            `json:"base"`  // snapshot name; "" = never synced
 	Files       map[string]string `json:"files"` // that snapshot's file hashes
 	PendingPush bool              `json:"pendingPush"`
+
+	// Set by restoring a snapshot, cleared when a sync records a new base: the snapshot put back
+	// and its file hashes, so the window can mark it current until the files change again.
+	Restored      string            `json:"restored,omitempty"`
+	RestoredFiles map[string]string `json:"restoredFiles,omitempty"`
 }
 
 // Store is the local data folder (%APPDATA%\wtfsync).
