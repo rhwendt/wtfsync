@@ -93,5 +93,8 @@ func (e *Engine) Restore(f wow.Flavor, id string, opt Options) (RestoreReport, e
 	if rep.Undo, err = e.Store.Backup(f.Name, f.WTFDir(), paths, e.Now(), local.Why{Reason: local.ReasonRestore}); err != nil {
 		return rep, err
 	}
-	return rep, e.Store.Restore(f.Name, id, f.WTFDir())
+	if err := e.Store.Restore(f.Name, id, f.WTFDir()); err != nil {
+		return rep, err
+	}
+	return rep, e.Store.PruneBackups(f.Name) // only now: the set restored may have been the oldest
 }

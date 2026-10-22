@@ -72,7 +72,7 @@ func (s Store) Backup(flavor, wtfDir string, paths []string, now time.Time, why 
 	if err := fsutil.WriteJSON(filepath.Join(dir, "index.json"), idx); err != nil {
 		return "", err
 	}
-	return id, s.pruneBackups(flavor)
+	return id, nil
 }
 
 // BackupSets lists a flavor's backup set ids, newest first.
@@ -115,7 +115,9 @@ func (s Store) Backups(flavor string) ([]BackupInfo, error) {
 	return out, nil
 }
 
-func (s Store) pruneBackups(flavor string) error {
+// PruneBackups keeps a flavor's newest 10 backup sets and deletes the rest. Backup doesn't prune by
+// itself, so a restore can make its undo set before the (possibly oldest) set it restores is gone.
+func (s Store) PruneBackups(flavor string) error {
 	ids, err := s.BackupSets(flavor)
 	if err != nil {
 		return err

@@ -68,6 +68,9 @@ func TestBackupSetsNewestFirstAndPruned(t *testing.T) {
 		}
 		ids = append(ids, id)
 	}
+	if err := s.PruneBackups("retail"); err != nil {
+		t.Fatal(err)
+	}
 	sets, err := s.BackupSets("retail")
 	if err != nil {
 		t.Fatal(err)
