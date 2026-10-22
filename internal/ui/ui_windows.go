@@ -46,6 +46,8 @@ type UI struct {
 	tray   *application.SystemTray
 	notes  *notes
 	prompt *prompter
+
+	quitting atomic.Bool // set by quit, so closing the main window then really closes it
 }
 
 // Run starts the tray and blocks until it quits. With --quit in os.Args it asks a running tray
@@ -82,6 +84,7 @@ func Run(d app.Deps, o Options) error {
 		return nil // no other tray was running
 	}
 	u.tray = u.wails.SystemTray.New()
+	u.tray.OnClick(func() { u.showMain("") }) // right-click still shows the menu
 	u.render()
 	return u.wails.Run()
 }
@@ -102,7 +105,7 @@ func (u *UI) loop(ctx context.Context) {
 	})
 	u.app.Refresh()
 	if !u.app.View().SetUp {
-		u.open("wizard")
+		u.showMain("wizard")
 	}
 	u.app.CheckUpdate(ctx)
 	var h diag.Health
@@ -145,6 +148,7 @@ func (u *UI) render() {
 		menu.Add(it.Label).SetEnabled(it.Enabled).OnClick(func(*application.Context) { u.do(id) })
 	}
 	u.tray.SetMenu(menu)
+	u.wails.Event.Emit("changed") // the main window reloads its data
 }
 
 func (u *UI) logHealth(h *diag.Health) {
@@ -163,10 +167,12 @@ func (u *UI) do(id string) {
 		go u.installUpdate()
 	case "quit":
 		go u.quit()
+	case "open", "addons":
+		u.showMain("")
 	case "setup":
-		u.open("wizard")
-	case "status", "restore", "addons", "settings":
-		u.open(id)
+		u.showMain("wizard")
+	case "settings":
+		u.showMain("settings")
 	case "logs":
 		u.openLogFolder()
 	}
@@ -188,6 +194,7 @@ func (u *UI) installUpdate() {
 // stopped halfway through writing files (the installer force-closes the tray after 10 s), and
 // quits.
 func (u *UI) quit() {
+	u.quitting.Store(true)
 	u.prompt.shutdown()
 	if !u.app.Close(8*time.Second) && u.opts.Log != nil {
 		u.opts.Log.Print("quitting while a sync is still running")
@@ -235,62 +242,64 @@ func (u *UI) secondInstance(data application.SecondInstanceData) {
 		go u.quit()
 		return
 	}
-	if u.app.View().SetUp {
-		u.open("status")
-	} else {
-		u.open("wizard")
-	}
+	u.showMain("")
 }
 
-type page struct {
-	title         string
-	width, height int
-}
-
-var pages = map[string]page{
-	"wizard":    {"Set up", 560, 520},
-	"conflicts": {"Settings changed on both PCs", 640, 480},
-	"settings":  {"Settings", 560, 560},
-	"status":    {"Status", 640, 420},
-	"addons":    {"Missing addons", 600, 420},
-	"restore":   {"Restore last backup", 600, 440},
-}
-
-// open shows a window, focusing it if it's already open. Each conflict question gets a window
-// of its own, and closing it cancels only that question.
+// open is how the conflict prompter asks for its dialog.
 func (u *UI) open(name string) {
 	if name == "conflicts" {
 		u.openConflicts(u.prompt.request().ID)
-		return
 	}
+}
+
+// showMain opens the main window, or brings it to the front, on view ("" keeps what it shows;
+// "settings" or "wizard"). Closing it only hides it. Each time it's shown, status is refreshed.
+func (u *UI) showMain(view string) {
+	go u.app.Refresh()
 	application.InvokeAsync(func() {
-		if w, ok := u.wails.Window.GetByName(name); ok {
+		if w, ok := u.wails.Window.GetByName("main"); ok {
+			u.wails.Event.Emit("show", view)
 			w.Show()
 			w.Focus()
 			return
 		}
-		u.newWindow(name, pages[name], "/"+name+".html").Show()
+		url := "/main.html"
+		if view != "" {
+			url += "?view=" + view
+		}
+		w := u.newWindow("main", "wtfsync", 860, 560, url)
+		w.RegisterHook(events.Common.WindowClosing, func(e *application.WindowEvent) {
+			if u.quitting.Load() {
+				return
+			}
+			e.Cancel()
+			w.Hide()
+		})
+		w.Show()
 	})
 }
 
+// openConflicts opens one conflict question's dialog; closing it cancels only that question.
 func (u *UI) openConflicts(id int) {
 	application.InvokeAsync(func() {
-		w := u.newWindow(fmt.Sprintf("conflicts-%d", id), pages["conflicts"], fmt.Sprintf("/conflicts.html?id=%d", id))
+		w := u.newWindow(fmt.Sprintf("conflicts-%d", id), "Settings changed on both PCs", 680, 480, fmt.Sprintf("/conflicts.html?id=%d", id))
 		w.OnWindowEvent(events.Common.WindowClosing, func(*application.WindowEvent) { u.prompt.reply(id, nil, true) })
 		w.Show()
 	})
 }
 
 // newWindow makes one of the tray's windows, logging when it opens and closes. Its background
-// follows the Windows theme, so a page that hasn't loaded (or failed to) isn't a black box.
-func (u *UI) newWindow(name string, p page, url string) *application.WebviewWindow {
+// matches the appearance setting, so a page that hasn't loaded (or failed to) isn't a black box.
+func (u *UI) newWindow(name, title string, width, height int, url string) *application.WebviewWindow {
+	s, _, _ := u.app.Settings()
+	theme := s.Theme()
 	bg := application.NewRGB(0xff, 0xff, 0xff)
-	if u.wails.Env.IsDarkMode() {
-		bg = application.NewRGB(0x20, 0x20, 0x20)
+	if theme == "dark" || (theme == "system" && u.wails.Env.IsDarkMode()) {
+		bg = application.NewRGB(0x1f, 0x1f, 0x1f)
 	}
 	u.opts.Log.Printf("window: open %s", name)
 	w := u.wails.Window.NewWithOptions(application.WebviewWindowOptions{
-		Name: name, Title: "wtfsync — " + p.title, Width: p.width, Height: p.height, URL: url, BackgroundColour: bg,
+		Name: name, Title: title, Width: width, Height: height, MinWidth: 640, MinHeight: 420, URL: url, BackgroundColour: bg,
 	})
 	w.OnWindowEvent(events.Common.WindowClosing, func(*application.WindowEvent) { u.opts.Log.Printf("window: closed %s", name) })
 	return w
