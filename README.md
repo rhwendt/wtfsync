@@ -12,7 +12,7 @@ It doesn't install addons, but it tells you what you're missing. Each push recor
 installed addons, and `pull`, `push` and `status` on the other PC list any it doesn't have, with
 a download link when the addon's `.toc` names its CurseForge, Wago or WoWInterface project:
 
-    NJ has addons not installed here:
+    laptop has addons not installed here:
       Plater  https://www.curseforge.com/projects/100547
       ElvUI (ElvUI, ElvUI_Options)  https://addons.wago.io/addons/…
 
@@ -47,7 +47,7 @@ Add `--dry-run` to any command to see what it would do without changing anything
 
 ## Download
 
-Run `wtfsync-setup.exe` from the latest [release](https://github.com/rhwendt/wtfsync/releases/latest).
+Run `wtfsync-setup.exe` from the latest [release](../../releases/latest).
 It installs for your Windows user only (no admin prompt) into `%LOCALAPPDATA%\Programs\wtfsync`,
 adds a Start menu entry, and can start wtfsync with Windows and add the `wtfsync` command to PATH.
 It isn't code-signed yet, so Windows SmartScreen asks once: **More info → Run anyway**. wtfsync's
@@ -65,7 +65,7 @@ footer) the major (the minor while still 0.x). Merges with only `docs:`, `chore:
 `refactor:` commits don't release.
 
 Each release's notes are the changelog: its features, fixes and breaking changes, grouped from the
-commit messages, with the PR each came from. See [all releases](https://github.com/rhwendt/wtfsync/releases).
+commit messages, with the PR each came from. See [all releases](../../releases).
 
 ## Tray app
 
@@ -208,7 +208,7 @@ builds `dist/wtfsync.exe`, `dist/wtfsync-tray.exe`, `dist/wtfsync-setup.exe` and
 
 1. `wtfsync init --dry-run`: the flavors and file list look right.
 2. `push` / `pull` with `--wow-dir` pointed at a *copy* of the install.
-3. NJ ↔ NY through Google Drive for Desktop (including streaming/placeholder mode).
+3. Two PCs syncing through Google Drive for Desktop (including streaming/placeholder mode).
 4. Change the same addon on both PCs without syncing: the second push asks.
 5. Install `wtfsync-setup.exe`: Start menu entry, tray icon, and the window opening on the setup wizard on a PC that isn't set up.
 6. Push on one PC → a notification on the other within a minute → **Pull** from it.
