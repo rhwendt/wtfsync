@@ -63,8 +63,9 @@ func (e *Engine) Push(f wow.Flavor, opt Options) (Report, error) {
 		if err := e.recordAddons(f, d, addons); err != nil {
 			return rep, err
 		}
-		if st.PendingPush {
-			st.PendingPush = false
+		// Nothing to upload: the files equal the base, so a restore is no longer what's current.
+		if st.PendingPush || st.Restored != "" {
+			st.PendingPush, st.Restored, st.RestoredFiles = false, "", nil
 			return rep, e.Store.SaveState(f.Name, st)
 		}
 		return rep, nil

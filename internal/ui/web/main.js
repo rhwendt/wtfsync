@@ -143,14 +143,18 @@ function confirmRestore(f) {
   const c = confirming;
   const p = f.Points.find((x) => x.Name === c.name);
   const at = p ? `${p.When} from ${p.From}` : "then";
+  const unsynced = !f.Points.some((x) => x.Current); // edits not in any point: only a local backup keeps them
   return h("div", { class: "confirm" },
     h("p", {}, `Restore ${f.Name} to ${at}? Your current files are saved first. Sync afterwards to send this to your other PCs.`),
+    unsynced ? h("p", { class: "muted" }, "This flavor has changes that aren't synced yet. They're saved to a local backup on this PC, not as a restore point.") : "",
     h("div", { class: "row end" },
       h("button", { onclick: () => { confirming = null; render(); } }, "Cancel"),
       h("button", { class: "primary", disabled: data.Busy !== "", onclick: () => run(async () => {
         confirming = null;
-        await call("RestorePoint", f.Name, c.name);
-        note = { text: "Restored. Sync to send it to your other PCs; to undo, restore the newest point." };
+        const undo = await call("RestorePoint", f.Name, c.name);
+        note = { text: "Restored. Sync to send it to your other PCs." + (unsynced && undo
+          ? ` Your changes that weren't synced yet are saved; to get them back: wtfsync restore --flavor ${f.Name} --set ${undo}`
+          : " To undo, restore the point that was current.") };
       }) }, "Restore")));
 }
 

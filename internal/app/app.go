@@ -417,16 +417,19 @@ func doing(what, only string) string {
 	return what + " " + only
 }
 
-// RestorePoint puts flavor back as it was at snapshot name, saving what it replaces first.
-func (a *App) RestorePoint(flavor, name string) error {
+// RestorePoint puts flavor back as it was at snapshot name, saving what it replaces first, and
+// returns that backup's id ("" when nothing needed replacing).
+func (a *App) RestorePoint(flavor, name string) (string, error) {
+	var undo string
 	err := a.perform("restoring "+flavor, flavor, false, func(eng *engine.Engine, f wow.Flavor) error {
-		_, err := eng.RestoreSnapshot(f, name, engine.Options{})
+		rep, err := eng.RestoreSnapshot(f, name, engine.Options{})
+		undo = rep.Undo
 		return err
 	})
 	if errors.Is(err, engine.ErrNoRestorePoint) {
-		return pointGone{err}
+		return "", pointGone{err}
 	}
-	return err
+	return undo, err
 }
 
 // pointGone is a restore of a snapshot pruned since the list was shown, in the words the window

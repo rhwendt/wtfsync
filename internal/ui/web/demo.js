@@ -49,7 +49,7 @@ const answers = {
     "Account/WOWPLAYER/SavedVariables/Details.lua",
     "Account/WOWPLAYER/Area 52/Thrall/SavedVariables/WeakAuras.lua",
   ] }),
-  RestorePoint: () => null,
+  RestorePoint: () => "20261022T120000.000Z",
   SaveSettings: () => ["Settings saved; sync history kept."],
   Setup: () => ["classic: got laptop's settings (12 file(s))"],
 };

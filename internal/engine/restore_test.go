@@ -164,3 +164,16 @@ func TestRestoreSnapshotAlreadyCurrent(t *testing.T) {
 		t.Fatalf("backups %v, want none", sets)
 	}
 }
+
+func TestSyncWithNothingToUploadClearsRestored(t *testing.T) {
+	v, _, s2 := restoreEnv(t)
+	if _, err := v.eng.RestoreSnapshot(v.flavor, s2, Options{}); err != nil { // files already match s2
+		t.Fatal(err)
+	}
+	if _, err := v.eng.Push(v.flavor, Options{}); err != nil {
+		t.Fatal(err)
+	}
+	if st := v.state(); st.Restored != "" || st.RestoredFiles != nil {
+		t.Fatalf("state %+v still restored", st)
+	}
+}

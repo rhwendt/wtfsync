@@ -191,7 +191,7 @@ func TestRestorePointPutsAnOlderSyncBack(t *testing.T) {
 		t.Fatalf("points %+v", points)
 	}
 	older := points[1].Name // a1
-	if err := nyApp.RestorePoint("retail", older); err != nil {
+	if _, err := nyApp.RestorePoint("retail", older); err != nil {
 		t.Fatal(err)
 	}
 	ny.want(svA, "a1")
@@ -207,9 +207,25 @@ func TestRestorePointPutsAnOlderSyncBack(t *testing.T) {
 	nj.want(svA, "a1")
 }
 
+func TestRestorePointKeepsUnsyncedEditsInABackup(t *testing.T) {
+	_, ny, _, nyApp := linked(t)
+	ny.write(svA, "edited, not synced")
+	nyApp.Refresh()
+	name := nyApp.Main().Flavors[0].Points[0].Name
+	undo, err := nyApp.RestorePoint("retail", name)
+	if err != nil || undo == "" {
+		t.Fatalf("undo %q, err %v", undo, err)
+	}
+	ny.want(svA, "a0")
+	if err := ny.store.Restore("retail", undo, ny.path("")); err != nil {
+		t.Fatal(err)
+	}
+	ny.want(svA, "edited, not synced")
+}
+
 func TestRestoreGonePointSaysSo(t *testing.T) {
 	_, ny, _, nyApp := linked(t)
-	err := nyApp.RestorePoint("retail", "000099_20000101T000000Z_00000000-0000-4000-8000-000000000001.tar.gz")
+	_, err := nyApp.RestorePoint("retail", "000099_20000101T000000Z_00000000-0000-4000-8000-000000000001.tar.gz")
 	if err == nil || err.Error() != "That restore point no longer exists" || !errors.Is(err, engine.ErrNoRestorePoint) {
 		t.Fatalf("err = %v", err)
 	}
@@ -437,7 +453,7 @@ func TestFlavorActionWhileBusyIsRefused(t *testing.T) {
 	if err := nyApp.SyncFlavor("retail"); !errors.Is(err, ErrBusy) {
 		t.Fatalf("push: %v", err)
 	}
-	if err := nyApp.RestorePoint("retail", "x"); !errors.Is(err, ErrBusy) {
+	if _, err := nyApp.RestorePoint("retail", "x"); !errors.Is(err, ErrBusy) {
 		t.Fatalf("restore: %v", err)
 	}
 }

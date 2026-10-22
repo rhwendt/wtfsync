@@ -88,8 +88,11 @@ func (b *Bridge) Main() app.MainPage { return b.u.app.Main() }
 func (b *Bridge) SyncAll() error               { return b.u.app.Sync() }
 func (b *Bridge) SyncFlavor(name string) error { return b.u.app.SyncFlavor(name) }
 
-// RestorePoint puts flavor back as it was at snapshot name.
-func (b *Bridge) RestorePoint(flavor, name string) error { return b.u.app.RestorePoint(flavor, name) }
+// RestorePoint puts flavor back as it was at snapshot name and returns the id of the local backup
+// of what it replaced ("" when nothing was).
+func (b *Bridge) RestorePoint(flavor, name string) (string, error) {
+	return b.u.app.RestorePoint(flavor, name)
+}
 
 func (b *Bridge) SetAppearance(v string) error              { return b.u.app.SetAppearance(v) }
 func (b *Bridge) CheckUpdate() error                        { return b.u.app.CheckUpdate(context.Background()) }
