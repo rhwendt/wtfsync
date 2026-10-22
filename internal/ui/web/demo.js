@@ -31,7 +31,7 @@ const answers = {
     Flavors: [{ Name: "classic", On: true }, { Name: "classic_beta", On: true }, { Name: "classic_era", On: false }, { Name: "retail", On: true }] }),
   Defaults: () => ({ Installs: ["C:\\Program Files (x86)\\World of Warcraft"], Clouds: ["G:\\My Drive\\wtfsync"],
     WoWDir: "C:\\Program Files (x86)\\World of Warcraft", Sync: "G:\\My Drive\\wtfsync", Name: "beehive", Rerun: false }),
-  CloudPCs: () => ["leviathan"],
+  CloudFolder: () => ({ HasData: true, PCs: ["leviathan"] }),
   Conflicts: () => ({ ID: 1, Flavor: "classic", Other: "leviathan", FirstLink: false, Files: [
     "Account/WOWPLAYER/SavedVariables/ElvUI.lua",
     "Account/WOWPLAYER/SavedVariables/Details.lua",

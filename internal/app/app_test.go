@@ -476,16 +476,29 @@ func TestSetAppearance(t *testing.T) {
 	}
 }
 
-func TestCloudPCsNamesTheOtherPCs(t *testing.T) {
+func TestCloudFolderNamesTheOtherPCs(t *testing.T) {
 	nj, _, njApp, nyApp := linked(t)
-	if got := nyApp.CloudPCs(nj.sync); !reflect.DeepEqual(got, []string{"NJ"}) {
-		t.Fatalf("from NY: %v", got)
+	if got := nyApp.CloudFolder(nj.sync); !got.HasData || !reflect.DeepEqual(got.PCs, []string{"NJ"}) {
+		t.Fatalf("from NY: %+v", got)
 	}
-	if got := njApp.CloudPCs(nj.sync); !reflect.DeepEqual(got, []string{"NY"}) {
-		t.Fatalf("from NJ: %v", got)
+	if got := njApp.CloudFolder(nj.sync); !reflect.DeepEqual(got.PCs, []string{"NY"}) {
+		t.Fatalf("from NJ: %+v", got)
 	}
-	if got := nyApp.CloudPCs(t.TempDir()); got == nil || len(got) != 0 {
+	if got := nyApp.CloudFolder(t.TempDir()); got.HasData || got.PCs == nil || len(got.PCs) != 0 {
 		t.Fatalf("empty folder: %#v", got)
+	}
+}
+
+func TestCloudFolderWithDataButNoReadablePCStillHasData(t *testing.T) {
+	nj, _, _, nyApp := linked(t)
+	// e.g. a streaming cloud drive that hasn't downloaded NJ's record yet
+	machines := filepath.Join(nj.sync, "wtfsync", "machines")
+	entries, _ := os.ReadDir(machines)
+	for _, e := range entries {
+		os.WriteFile(filepath.Join(machines, e.Name()), []byte("not json"), 0o644)
+	}
+	if got := nyApp.CloudFolder(nj.sync); !got.HasData || len(got.PCs) != 0 {
+		t.Fatalf("got %+v; want data and no names: the wizard must still offer Join", got)
 	}
 }
 

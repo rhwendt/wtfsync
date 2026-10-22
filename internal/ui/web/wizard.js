@@ -9,13 +9,19 @@ export async function wizard(root, { start = 0, done, cancel }) {
   const wow = folderPicker(d.Installs, d.WoWDir, "Your World of Warcraft folder");
   const cloud = folderPicker(d.Clouds, d.Sync, "A folder your cloud client syncs");
   const name = h("input", { type: "text", value: d.Name });
-  let pcs = [];          // PCs already in the chosen cloud folder
+  let hasData = false;   // the chosen cloud folder already has wtfsync data
+  let pcs = [];          // the other PCs in it whose records could be read (may be empty)
   let first = true;      // "This is my first PC"
   let step = Math.min(start, 3);
   let error = "";
   let result = null;     // lines from Setup, on the last step
 
-  const lookUp = async () => { pcs = await call("CloudPCs", cloud.value()); first = pcs.length === 0; };
+  const lookUp = async () => {
+    const c = await call("CloudFolder", cloud.value());
+    hasData = c.HasData;
+    pcs = c.PCs;
+    first = !hasData;
+  };
   if (step >= 3) await lookUp();
 
   async function next() {
@@ -52,11 +58,14 @@ export async function wizard(root, { start = 0, done, cancel }) {
         h("p", { class: "muted" }, "A folder Google Drive, OneDrive, Dropbox or iCloud keeps in sync on all your PCs."), cloud.el];
       case 2: return [h("h1", {}, "What should this PC be called?"),
         h("p", { class: "muted" }, "Your other PCs show this name."), name];
-      case 3: return pcs.length
+      case 3: return hasData
         ? [h("h1", {}, "Is this your first PC with wtfsync?"),
-          h("p", { class: "muted" }, "This cloud folder already has settings from ", h("b", {}, pcs.join(", ")), "."),
+          pcs.length
+            ? h("p", { class: "muted" }, "This cloud folder already has settings from ", h("b", {}, pcs.join(", ")), ".")
+            : h("p", { class: "muted" }, "This cloud folder already has wtfsync settings from another PC."),
           choice(true, "This is my first PC", "Start a new sync with this PC's settings."),
-          choice(false, "Join " + pcs.join(", "), "Get their settings. If both PCs changed the same file, you'll choose which to keep.")]
+          choice(false, pcs.length ? "Join " + pcs.join(", ") : "Join my other PC",
+            "Get their settings. If both PCs changed the same file, you'll choose which to keep.")]
         : [h("h1", {}, "Start syncing from this PC"),
           h("p", { class: "muted" }, "This cloud folder has no wtfsync data yet, so this PC starts it. Set up your other PCs afterwards and choose to join this one.")];
       default: return result

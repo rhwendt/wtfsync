@@ -102,11 +102,11 @@ func (b *Bridge) Restore(flavor, id string) (string, error) {
 	return r.Undo, err
 }
 
-func (b *Bridge) SetAppearance(v string) error    { return b.u.app.SetAppearance(v) }
-func (b *Bridge) CheckUpdate() error              { return b.u.app.CheckUpdate(context.Background()) }
-func (b *Bridge) InstallUpdate()                  { go b.u.installUpdate() }
-func (b *Bridge) OpenLogFolder()                  { b.u.openLogFolder() }
-func (b *Bridge) CloudPCs(folder string) []string { return list(b.u.app.CloudPCs(folder)) }
+func (b *Bridge) SetAppearance(v string) error              { return b.u.app.SetAppearance(v) }
+func (b *Bridge) CheckUpdate() error                        { return b.u.app.CheckUpdate(context.Background()) }
+func (b *Bridge) InstallUpdate()                            { go b.u.installUpdate() }
+func (b *Bridge) OpenLogFolder()                            { b.u.openLogFolder() }
+func (b *Bridge) CloudFolder(folder string) app.CloudFolder { return b.u.app.CloudFolder(folder) }
 
 // OpenURL opens an addon's download page; only https links are followed.
 func (b *Bridge) OpenURL(url string) error {

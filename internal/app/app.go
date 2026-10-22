@@ -592,20 +592,28 @@ func (a *App) SetAppearance(v string) error {
 	return nil
 }
 
-// CloudPCs names the PCs whose wtfsync data is in folder, other than this one; empty when the folder
-// has none (or can't be read). The wizard uses it to offer "Join <PC>".
-func (a *App) CloudPCs(folder string) []string {
-	names := []string{}
+// CloudFolder is what the wizard needs to know about a cloud folder.
+type CloudFolder struct {
+	HasData bool     // the folder has wtfsync data: this PC joins it unless it's a rerun of the first PC
+	PCs     []string // the other PCs whose records could be read; may be empty even with data
+}
+
+// CloudFolder says whether folder has wtfsync data and names the PCs in it other than this one.
+// Whether to offer "Join" comes from HasData, not PCs: a streaming drive may not have downloaded
+// the other PC's record yet.
+func (a *App) CloudFolder(folder string) CloudFolder {
+	c := CloudFolder{PCs: []string{}}
 	d, err := syncdir.Open(folder, a.d.Hydrator)
 	if err != nil {
-		return names
+		return c
 	}
+	c.HasData = true
 	me, _ := a.d.Store.LoadSettings()
 	machines, _ := d.Machines()
 	for _, m := range machines {
 		if m.UUID != me.MachineUUID {
-			names = append(names, m.Name)
+			c.PCs = append(c.PCs, m.Name)
 		}
 	}
-	return names
+	return c
 }
