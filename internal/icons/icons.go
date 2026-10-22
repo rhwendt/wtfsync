@@ -1,5 +1,5 @@
-// Package icons draws the tray icons from the SVGs beside it: a dark "WTF" tile with a strip
-// along the bottom whose colour and symbol are the sync state.
+// Package icons draws wtfsync's icons from the SVGs beside it: the tray's dark "WTF" tile with a
+// strip along the bottom whose colour and symbol are the sync state, and the plain tile for windows.
 package icons
 
 import (
@@ -20,12 +20,20 @@ var (
 	Syncing     = render("syncing.svg")      // blue arrows: working
 	NewSettings = render("new-settings.svg") // amber down arrow: another PC has newer settings
 	Attention   = render("attention.svg")    // red exclamation mark: needs you
+
+	App = renderAt("app.svg", appSize) // the windows' title bar and taskbar icon
 )
 
-// size is what the PNGs are drawn at; Windows scales them down to the tray's 16–32 px.
-const size = 64
+// size is what the tray PNGs are drawn at; Windows scales them down to the tray's 16–32 px.
+// appSize is the app icon's, which Windows also shows large (Alt+Tab, the taskbar).
+const (
+	size    = 64
+	appSize = 256
+)
 
-func render(name string) []byte {
+func render(name string) []byte { return renderAt(name, size) }
+
+func renderAt(name string, size int) []byte {
 	f, err := svgs.Open(name)
 	if err != nil {
 		panic(err) // embedded above: only a typo here gets this far
@@ -35,7 +43,7 @@ func render(name string) []byte {
 	if err != nil {
 		panic(name + ": " + err.Error()) // the tests render every icon
 	}
-	icon.SetTarget(0, 0, size, size)
+	icon.SetTarget(0, 0, float64(size), float64(size))
 	img := image.NewRGBA(image.Rect(0, 0, size, size))
 	icon.Draw(rasterx.NewDasher(size, size, rasterx.NewScannerGV(size, size, img, img.Bounds())), 1)
 	var buf bytes.Buffer

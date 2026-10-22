@@ -52,3 +52,26 @@ func TestIconsAreTheWTFTileWithAStateStrip(t *testing.T) {
 		}
 	}
 }
+
+// The app icon (window title bar, taskbar) is the WTF tile without a state strip, drawn large.
+func TestAppIconIsTheLargeWTFTile(t *testing.T) {
+	img, err := png.Decode(bytes.NewReader(App))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s := img.Bounds().Size(); s.X != appSize || s.Y != appSize {
+		t.Fatalf("size %v, want %dpx", s, appSize)
+	}
+	if _, _, _, a := img.At(0, 0).RGBA(); a != 0 {
+		t.Error("rounded corner should be transparent")
+	}
+	if got := rgb(img.At(appSize/2, appSize*15/16)); got != [3]uint8{0x1e, 0x25, 0x30} {
+		t.Errorf("tile colour %x below the letters", got)
+	}
+	// The T's stem is 7/64 of the icon wide: white well off its centre line, not a hairline.
+	for _, x := range []int{appSize * 37 / 64, appSize*37/64 - appSize/32, appSize*37/64 + appSize/32} {
+		if got := rgb(img.At(x, appSize/2)); got != [3]uint8{0xff, 0xff, 0xff} {
+			t.Errorf("no white lettering at x=%d on the T, got %x", x, got)
+		}
+	}
+}

@@ -68,6 +68,7 @@ func Run(d app.Deps, o Options) error {
 	u.wails = application.New(application.Options{
 		Name:        "wtfsync",
 		Description: "Syncs World of Warcraft addon settings between your PCs",
+		Icon:        icons.App, // title bar and taskbar of every window
 		Services:    []application.Service{application.NewService(u.notes), application.NewService(&Bridge{u: u})},
 		Assets:      application.AssetOptions{Handler: application.AssetFileServerFS(web)},
 		SingleInstance: &application.SingleInstanceOptions{
