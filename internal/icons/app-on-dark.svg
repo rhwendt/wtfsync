@@ -1,0 +1,7 @@
+<!-- wtfsync app icon, the top bar's WTF logo; white tile, dark letters: for dark taskbars and title bars (and the exe, which can't switch).
+     The letters are Inter ExtraBold (SIL Open Font License) as outlines, drawn at 256 px.
+     Paths only: oksvg mis-draws <polyline> and needs ry beside rx. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <rect width="256" height="256" rx="40" ry="40" fill="#fff"/>
+  <path fill="#1e2530" d="M39.3 163.2H58.2L66.4 130.7C67.7 125.4 68.5 119.6 69.4 113.7C70.3 119.7 71.2 125.5 72.5 130.7L80.7 163.2H99.6L118.4 92.8H99.9L93 123.9C91.6 130.5 90.5 138.4 89.4 145.8C88.1 138.4 86.9 130.5 85.4 123.9L77.9 92.8H61L53.5 123.9C52 130.5 50.7 138.5 49.5 146C48.4 138.5 47.3 130.5 45.9 123.9L38.9 92.8H20.5ZM121.8 106.4H143.1V163.2H159.7V106.4H181V92.8H121.8ZM187.7 163.2H204.4V137.6H232.5V124.3H204.4V106.4H235.5V92.8H187.7Z"/>
+</svg>

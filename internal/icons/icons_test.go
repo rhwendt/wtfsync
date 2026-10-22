@@ -53,25 +53,35 @@ func TestIconsAreTheWTFTileWithAStateStrip(t *testing.T) {
 	}
 }
 
-// The app icon (window title bar, taskbar) is the WTF tile without a state strip, drawn large.
-func TestAppIconIsTheLargeWTFTile(t *testing.T) {
-	img, err := png.Decode(bytes.NewReader(App))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if s := img.Bounds().Size(); s.X != appSize || s.Y != appSize {
-		t.Fatalf("size %v, want %dpx", s, appSize)
-	}
-	if _, _, _, a := img.At(0, 0).RGBA(); a != 0 {
-		t.Error("rounded corner should be transparent")
-	}
-	if got := rgb(img.At(appSize/2, appSize*15/16)); got != [3]uint8{0x1e, 0x25, 0x30} {
-		t.Errorf("tile colour %x below the letters", got)
-	}
-	// The T's stem is 7/64 of the icon wide: white well off its centre line, not a hairline.
-	for _, x := range []int{appSize * 37 / 64, appSize*37/64 - appSize/32, appSize*37/64 + appSize/32} {
-		if got := rgb(img.At(x, appSize/2)); got != [3]uint8{0xff, 0xff, 0xff} {
-			t.Errorf("no white lettering at x=%d on the T, got %x", x, got)
+// The app icon is the top bar's WTF logo, drawn large: a white tile with dark letters for dark
+// backgrounds (OnDark), and the same reversed for light ones (OnLight).
+func TestAppIconsAreTheLogoAndItsReverse(t *testing.T) {
+	white, dark := [3]uint8{0xff, 0xff, 0xff}, [3]uint8{0x1e, 0x25, 0x30}
+	for name, tt := range map[string]struct {
+		png             []byte
+		tile, lettering [3]uint8
+	}{
+		"OnDark":  {AppOnDark, white, dark},
+		"OnLight": {AppOnLight, dark, white},
+	} {
+		img, err := png.Decode(bytes.NewReader(tt.png))
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if s := img.Bounds().Size(); s.X != appSize || s.Y != appSize {
+			t.Fatalf("%s: size %v, want %dpx", name, s, appSize)
+		}
+		if _, _, _, a := img.At(0, 0).RGBA(); a != 0 {
+			t.Errorf("%s: rounded corner should be transparent", name)
+		}
+		if got := rgb(img.At(appSize/2, appSize/4)); got != tt.tile {
+			t.Errorf("%s: tile colour %x above the letters, want %x", name, got, tt.tile)
+		}
+		// The T's stem, x 143–160 of 256: solid well off its centre line.
+		for _, x := range []int{146, 151, 156} {
+			if got := rgb(img.At(x, appSize/2+10)); got != tt.lettering {
+				t.Errorf("%s: lettering at x=%d on the T is %x, want %x", name, x, got, tt.lettering)
+			}
 		}
 	}
 }

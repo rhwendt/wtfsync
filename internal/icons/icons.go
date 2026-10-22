@@ -1,5 +1,6 @@
 // Package icons draws wtfsync's icons from the SVGs beside it: the tray's dark "WTF" tile with a
-// strip along the bottom whose colour and symbol are the sync state, and the plain tile for windows.
+// strip along the bottom whose colour and symbol are the sync state, and the app icon: the top
+// bar's WTF logo, in two colourings so it stands out on dark and light backgrounds.
 package icons
 
 import (
@@ -21,7 +22,8 @@ var (
 	NewSettings = render("new-settings.svg") // amber down arrow: another PC has newer settings
 	Attention   = render("attention.svg")    // red exclamation mark: needs you
 
-	App = renderAt("app.svg", appSize) // the windows' title bar and taskbar icon
+	AppOnDark  = renderAt("app-on-dark.svg", appSize)  // white tile: dark taskbar, and the exe's icon
+	AppOnLight = renderAt("app-on-light.svg", appSize) // dark tile: light taskbar
 )
 
 // size is what the tray PNGs are drawn at; Windows scales them down to the tray's 16–32 px.
