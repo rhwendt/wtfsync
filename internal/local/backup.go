@@ -97,7 +97,7 @@ func (s Store) BackupSets(flavor string) ([]string, error) {
 	return ids, nil
 }
 
-// Backups lists a flavor's backup sets, newest first.
+// Backups lists a flavor's readable backup sets, newest first.
 func (s Store) Backups(flavor string) ([]BackupInfo, error) {
 	ids, err := s.BackupSets(flavor)
 	if err != nil {
@@ -107,7 +107,7 @@ func (s Store) Backups(flavor string) ([]BackupInfo, error) {
 	for _, id := range ids {
 		idx, err := s.readIndex(flavor, id)
 		if err != nil {
-			return nil, err
+			continue // pruned meanwhile, or damaged: list the rest
 		}
 		t, _ := time.Parse(backupLayout, id)
 		out = append(out, BackupInfo{ID: id, Time: t, Why: idx.Why, Files: len(idx.Present) + len(idx.Absent)})

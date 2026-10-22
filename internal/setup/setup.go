@@ -23,6 +23,11 @@ type Answers struct {
 	SyncFolder string
 	Name       string
 	First      bool // init: create the sync data and push; otherwise link: join it and pull
+
+	// AllFlavors and Flavors replace the flavor choices (the Settings page); nil AllFlavors keeps
+	// the current ones. They're saved only if the rest of the answers are valid.
+	AllFlavors *bool
+	Flavors    map[string]bool
 }
 
 // Env is what Run needs from outside.
@@ -113,6 +118,10 @@ func Run(env Env, a Answers) (Result, error) {
 		s.MachineUUID = prev.MachineUUID
 		maps.Copy(s.Flavors, prev.Flavors)
 		s.AllFlavors, s.Appearance = prev.AllFlavors, prev.Appearance
+	}
+	if a.AllFlavors != nil {
+		s.AllFlavors = a.AllFlavors
+		maps.Copy(s.Flavors, a.Flavors)
 	}
 	// Listing every flavor found gives the Settings page's switches a starting point. When the
 	// user picks flavors individually, one found later stays off (unlisted).

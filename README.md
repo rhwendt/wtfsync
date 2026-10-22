@@ -41,7 +41,7 @@ Close WoW, then:
     wtfsync status    # what's changed, and whether you're behind
 
 If the same addon's settings changed on both PCs, wtfsync asks which one to keep. Every pull backs
-up the files it overwrites; `wtfsync restore` puts the last backup back.
+up the files it overwrites; `wtfsync restore` puts the newest backup back.
 
 Add `--dry-run` to any command to see what it would do without changing anything.
 
@@ -122,7 +122,7 @@ commands that would change files refuse while that flavor's game is running.
 
 ### `wtfsync init`
 
-Sets up the first PC: asks for the cloud folder, the WoW folder and a name for this PC, creates
+Sets up the first PC: asks for the WoW folder, the cloud folder and a name for this PC, creates
 wtfsync's data in the cloud folder, then pushes. Run it again to change any of those answers; the
 PC keeps its identity, and pointing it at a different folder clears its sync history.
 
@@ -164,10 +164,11 @@ changed here, whether a push is pending, and addons other PCs have that this one
 
 ### `wtfsync restore`
 
-Puts back the files from the last backup (or an older one with `--set`), backing up what it
-replaces first. It lists the other backups you can pick from.
+Puts back the files from the newest backup (or an older one with `--set`), backing up what it
+replaces first. With `--dry-run` it shows what it would put back and lists the other backups'
+ids.
 
-    wtfsync restore --flavor retail
+    wtfsync restore --flavor retail --dry-run
     wtfsync restore --flavor retail --set 20261020T035114.000Z
 
 ### `wtfsync version`
@@ -184,7 +185,7 @@ Prints the version.
 | `--sync-dir <path>` | all but version | the cloud-synced folder (overrides settings) |
 | `--data-dir <path>` | all but version | wtfsync's local data folder (default `%APPDATA%\wtfsync`) |
 | `--name <name>` | init, link | this PC's display name |
-| `--set <id>` | restore | which backup to restore (ids are listed by `restore`) |
+| `--set <id>` | restore | which backup to restore (`restore --dry-run` lists the ids) |
 
 ### Exit codes
 

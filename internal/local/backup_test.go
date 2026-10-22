@@ -134,3 +134,15 @@ func TestMissingBackupIsErrNoBackup(t *testing.T) {
 		t.Fatalf("err = %v, want ErrNoBackup", err)
 	}
 }
+
+func TestBackupsSkipsAnUnreadableSet(t *testing.T) {
+	s, wtf := Store{Dir: t.TempDir()}, t.TempDir()
+	put(t, wtf, svA, "a")
+	bad, _ := s.Backup("retail", wtf, []string{svA}, t0, Why{})
+	s.Backup("retail", wtf, []string{svA}, t0.Add(time.Hour), Why{Reason: ReasonRestore})
+	os.WriteFile(filepath.Join(s.Dir, "backups", "retail", bad, "index.json"), []byte("{broken"), 0o644)
+	got, err := s.Backups("retail")
+	if err != nil || len(got) != 1 || got[0].Reason != ReasonRestore {
+		t.Fatalf("backups %+v, %v; want the readable one", got, err)
+	}
+}

@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/rhwendt/wtfsync/internal/collect"
 	"github.com/rhwendt/wtfsync/internal/engine"
 	"github.com/rhwendt/wtfsync/internal/local"
 	"github.com/rhwendt/wtfsync/internal/lock"
@@ -447,13 +448,78 @@ func TestRestorePrunedBackupSaysSo(t *testing.T) {
 	nj.write(svA, "a1")
 	njApp.Push()
 	nyApp.Pull()
-	_, err := nyApp.Restore("retail", "20000101T000000.000Z")
-	if !errors.Is(err, local.ErrNoBackup) {
-		t.Fatalf("err = %v, want ErrNoBackup", err)
+	gone := "20000101T000000.000Z"
+	if _, err := nyApp.RestorePreview("retail", gone); err == nil || err.Error() != "That backup no longer exists" || !errors.Is(err, local.ErrNoBackup) {
+		t.Fatalf("preview err = %v", err)
+	}
+	_, err := nyApp.Restore("retail", gone)
+	if err == nil || err.Error() != "That backup no longer exists" || !errors.Is(err, local.ErrNoBackup) {
+		t.Fatalf("restore err = %v", err)
 	}
 	ny.want(svA, "a1") // nothing written
-	if b := nyApp.Main().Flavors[0].Badge; b.Words != "That backup no longer exists" {
+	// Nothing changed, so the flavor doesn't turn red: the page shows the error instead.
+	if b := nyApp.Main().Flavors[0].Badge; b.Kind != "ok" {
 		t.Fatalf("badge %+v", b)
+	}
+	if v := nyApp.View(); v.Icon == Attention || len(ny.notices.ids()) != 0 {
+		t.Fatalf("icon %v, notices %v", v.Icon, ny.notices.ids())
+	}
+}
+
+func TestSaveSettingsWhileBusyChangesNothing(t *testing.T) {
+	_, ny, _, nyApp := linked(t)
+	nyApp.begin("pulling")
+	_, err := nyApp.SaveSettings(SettingsInput{Name: "NY", WoWDir: ny.wowDir, SyncFolder: ny.sync, Flavors: map[string]bool{"retail": false}})
+	nyApp.end()
+	if !errors.Is(err, ErrBusy) {
+		t.Fatalf("err = %v, want ErrBusy", err)
+	}
+	if s, _, _ := nyApp.Settings(); !s.All() || !s.Enabled("retail") {
+		t.Fatalf("settings changed anyway: %+v", s)
+	}
+}
+
+func TestSaveSettingsBadWoWFolderChangesNothing(t *testing.T) {
+	_, ny, _, nyApp := linked(t)
+	if _, err := nyApp.SaveSettings(SettingsInput{Name: "NY", WoWDir: t.TempDir(), SyncFolder: ny.sync, Flavors: map[string]bool{"retail": false}}); err == nil {
+		t.Fatal("a folder without WoW was accepted")
+	}
+	if s, _, _ := nyApp.Settings(); !s.All() || !s.Enabled("retail") {
+		t.Fatalf("settings changed anyway: %+v", s)
+	}
+}
+
+func TestOlderRefreshCantOverwriteANewerOne(t *testing.T) {
+	_, _, _, nyApp := linked(t)
+	older, newer := nyApp.ticket(), nyApp.ticket()
+	nyApp.keep(newer, map[string]*FlavorView{"retail": {Name: "retail", Status: engine.Status{LocalChanges: 0}}})
+	nyApp.keep(older, map[string]*FlavorView{"retail": {Name: "retail", Status: engine.Status{LocalChanges: 26}}})
+	if v := nyApp.View(); len(v.Flavors) != 1 || v.Flavors[0].Status.LocalChanges != 0 {
+		t.Fatalf("stale refresh won: %+v", v.Flavors)
+	}
+}
+
+func TestFlavorNames(t *testing.T) {
+	_, ny, _, nyApp := linked(t)
+	os.MkdirAll(filepath.Join(ny.wowDir, "_classic_", "WTF", "Account"), 0o755)
+	if got := nyApp.FlavorNames(ny.wowDir); !reflect.DeepEqual(got, []string{"classic", "retail"}) {
+		t.Fatalf("got %v", got)
+	}
+	if got := nyApp.FlavorNames(t.TempDir()); got == nil || len(got) != 0 {
+		t.Fatalf("not a WoW folder: %#v", got)
+	}
+}
+
+func TestFirstFlavorMissingAddons(t *testing.T) {
+	v := View{Flavors: []FlavorView{
+		{Name: "classic"},
+		{Name: "retail", Status: engine.Status{MissingAddons: []engine.OtherAddons{{Machine: "NJ", Addons: []collect.MissingAddon{{Name: "Plater"}}}}}},
+	}}
+	if got := FirstMissing(v); got != "retail" {
+		t.Fatalf("got %q", got)
+	}
+	if got := FirstMissing(View{}); got != "" {
+		t.Fatalf("none: got %q", got)
 	}
 }
 

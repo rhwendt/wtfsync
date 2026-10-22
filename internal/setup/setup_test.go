@@ -182,3 +182,30 @@ func TestFirstSetupSyncsAllFlavorsAndRerunKeepsAppearance(t *testing.T) {
 		t.Fatalf("rerun settings %+v", res.Settings)
 	}
 }
+
+func TestRerunAppliesFlavorChoices(t *testing.T) {
+	p, sync := newPC(t), t.TempDir()
+	if _, err := Run(p.env, p.answers(sync, true)); err != nil {
+		t.Fatal(err)
+	}
+	a := p.answers(sync, true)
+	off := false
+	a.AllFlavors, a.Flavors = &off, map[string]bool{"retail": false}
+	res, err := Run(p.env, a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Settings.All() || res.Settings.Enabled("retail") {
+		t.Fatalf("choices not applied: %+v", res.Settings)
+	}
+	bad := p.answers(sync, true)
+	bad.WoWDir = t.TempDir()
+	on := true
+	bad.AllFlavors = &on
+	if _, err := Run(p.env, bad); err == nil {
+		t.Fatal("bad WoW folder accepted")
+	}
+	if s, _ := p.env.Store.LoadSettings(); s.All() {
+		t.Fatal("a failed rerun still saved the flavor choices")
+	}
+}

@@ -105,6 +105,16 @@ func summarize(v *View) {
 	}
 }
 
+// FirstMissing is the first flavor with missing addons, for the notification's Show; "" if none.
+func FirstMissing(v View) string {
+	for _, f := range v.Flavors {
+		if f.missing() > 0 {
+			return f.Name
+		}
+	}
+	return ""
+}
+
 // MenuItem is one tray menu entry. ID "-" is a separator.
 type MenuItem struct {
 	ID      string

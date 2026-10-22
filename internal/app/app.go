@@ -68,6 +68,8 @@ type App struct {
 	mu       sync.Mutex
 	busy     string
 	watching func() // ends the running action's watch
+	tickets  uint64 // Refreshes started
+	shown    uint64 // the Refresh whose results flavors holds
 	closing  bool   // Close was called: no new actions or ticks
 	flavors  map[string]*FlavorView
 	update   *update.Release
@@ -142,11 +144,10 @@ func (a *App) enabled() (*engine.Engine, []wow.Flavor, error) {
 // Refresh reloads every enabled flavor's status. Errors from the last action stay until the
 // next action on that flavor.
 func (a *App) Refresh() {
+	t := a.ticket()
 	eng, flavors, err := a.enabled()
 	if err != nil {
-		a.mu.Lock()
-		a.flavors = map[string]*FlavorView{}
-		a.mu.Unlock()
+		a.keep(t, map[string]*FlavorView{})
 		a.d.Changed()
 		return
 	}
@@ -158,15 +159,36 @@ func (a *App) Refresh() {
 		}
 		fresh[f.Name] = &FlavorView{Name: f.Name, Status: st}
 	}
+	if a.keep(t, fresh) {
+		a.d.Changed()
+	}
+}
+
+// ticket numbers a Refresh, so a slow one that started earlier can't overwrite a later one's
+// results (e.g. the window's refresh on open finishing after a push's).
+func (a *App) ticket() uint64 {
 	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.tickets++
+	return a.tickets
+}
+
+// keep stores Refresh t's results unless a later Refresh already stored its own. Errors from the
+// last action carry over.
+func (a *App) keep(t uint64, fresh map[string]*FlavorView) bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if t < a.shown {
+		return false
+	}
+	a.shown = t
 	for name, fv := range fresh {
 		if old, ok := a.flavors[name]; ok {
 			fv.Err = old.Err
 		}
 	}
 	a.flavors = fresh
-	a.mu.Unlock()
-	a.d.Changed()
+	return true
 }
 
 // Tick runs every 60 s: retry pushes that couldn't reach the sync folder, refresh, and announce
@@ -295,7 +317,13 @@ func stacks() []byte {
 
 // run does one user action: busy state, the per-PC lock, then fn per enabled flavor (or only the
 // flavor named by only). Per-flavor errors are kept on the flavor and raised as notifications.
-func (a *App) run(what, only string, fn func(eng *engine.Engine, f wow.Flavor) error) (err error) {
+func (a *App) run(what, only string, fn func(eng *engine.Engine, f wow.Flavor) error) error {
+	return a.perform(what, only, true, fn)
+}
+
+// perform is run; record false leaves the flavors' errors and notifications alone, for actions that
+// change nothing when they fail (a restore shows its error on the page instead).
+func (a *App) perform(what, only string, record bool, fn func(eng *engine.Engine, f wow.Flavor) error) (err error) {
 	if !a.begin(what) {
 		return ErrBusy
 	}
@@ -325,6 +353,12 @@ func (a *App) run(what, only string, fn func(eng *engine.Engine, f wow.Flavor) e
 			continue
 		}
 		err := fn(eng, f)
+		if !record {
+			if err != nil {
+				errs = append(errs, fmt.Errorf("%s: %w", f.Name, err))
+			}
+			continue
+		}
 		a.mu.Lock()
 		fv, ok := a.flavors[f.Name]
 		if !ok {
@@ -402,18 +436,48 @@ func (a *App) RestorePreview(flavor, id string) (engine.RestoreReport, error) {
 	if err != nil {
 		return engine.RestoreReport{}, err
 	}
-	return eng.Restore(f, id, engine.Options{DryRun: true})
+	rep, err := eng.Restore(f, id, engine.Options{DryRun: true})
+	return rep, gone(err)
 }
 
 // Restore puts one of flavor's backup sets back (id "" = the newest), backing up what it replaces.
 func (a *App) Restore(flavor, id string) (engine.RestoreReport, error) {
 	var rep engine.RestoreReport
-	err := a.run("restoring "+flavor, flavor, func(eng *engine.Engine, f wow.Flavor) error {
+	err := a.perform("restoring "+flavor, flavor, false, func(eng *engine.Engine, f wow.Flavor) error {
 		var err error
 		rep, err = eng.Restore(f, id, engine.Options{})
 		return err
 	})
-	return rep, err
+	return rep, gone(err)
+}
+
+// backupGone is a restore of a set that was pruned since the list was shown, in the words the
+// window shows. It still matches local.ErrNoBackup.
+type backupGone struct{ err error }
+
+func (e backupGone) Error() string { return "That backup no longer exists" }
+func (e backupGone) Unwrap() error { return e.err }
+
+func gone(err error) error {
+	if errors.Is(err, local.ErrNoBackup) {
+		return backupGone{err}
+	}
+	return err
+}
+
+// FlavorNames lists the flavors in a WoW folder, sorted; empty when it isn't one. The Settings page
+// uses it when the WoW folder is changed.
+func (a *App) FlavorNames(wowDir string) []string {
+	names := []string{}
+	flavors, err := setup.Flavors(wowDir)
+	if err != nil {
+		return names
+	}
+	for _, f := range flavors {
+		names = append(names, f.Name)
+	}
+	slices.Sort(names)
+	return names
 }
 
 func (a *App) flavor(name string) (*engine.Engine, wow.Flavor, error) {
@@ -463,19 +527,10 @@ type SettingsInput struct {
 // SaveSettings applies the settings page. Changing folders follows the setup rerun rules; a new
 // sync folder that already has wtfsync data is joined (link), otherwise this PC starts it (init).
 func (a *App) SaveSettings(in SettingsInput) (setup.Result, error) {
-	s, err := a.d.Store.LoadSettings()
-	if err != nil {
-		return setup.Result{}, err
-	}
-	s.AllFlavors = &in.AllFlavors
-	for name, on := range in.Flavors {
-		s.Flavors[name] = on
-	}
-	if err := a.d.Store.SaveSettings(s); err != nil {
-		return setup.Result{}, err
-	}
+	all := in.AllFlavors
 	_, openErr := syncdir.Open(in.SyncFolder, a.d.Hydrator)
-	res, err := a.Setup(setup.Answers{WoWDir: in.WoWDir, SyncFolder: in.SyncFolder, Name: in.Name, First: openErr != nil})
+	res, err := a.Setup(setup.Answers{WoWDir: in.WoWDir, SyncFolder: in.SyncFolder, Name: in.Name, First: openErr != nil,
+		AllFlavors: &all, Flavors: in.Flavors})
 	if err != nil {
 		return res, err
 	}
