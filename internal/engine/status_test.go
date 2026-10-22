@@ -3,10 +3,12 @@ package engine
 import (
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"reflect"
 	"testing"
 
+	"github.com/rhwendt/wtfsync/internal/collect"
 	"github.com/rhwendt/wtfsync/internal/local"
 )
 
@@ -22,9 +24,81 @@ func TestStatus(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := Status{Flavor: "retail", Base: s1.String(), BaseBy: "NJ", Newest: s2.String(), NewestBy: "NJ", Reachable: true, LocalChanges: 2}
+	want := Status{Flavor: "retail", Base: s1.String(), BaseBy: "NJ", Newest: s2.String(), NewestBy: "NJ", Reachable: true, LocalChanges: 2,
+		Points: []RestorePoint{{Name: s2.String(), Time: s2.Time, From: "NJ"}, {Name: s1.String(), Time: s1.Time, From: "NJ"}}}
 	if !reflect.DeepEqual(st, want) {
 		t.Fatalf("got %+v\nwant %+v", st, want)
+	}
+}
+
+func points(t *testing.T, v *env) []RestorePoint {
+	t.Helper()
+	st, err := v.eng.Status(v.flavor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return st.Points
+}
+
+func current(ps []RestorePoint) string {
+	for _, p := range ps {
+		if p.Current {
+			return p.Name
+		}
+	}
+	return ""
+}
+
+func TestStatusPointsNewestFirstAndCurrentBase(t *testing.T) {
+	v := newEnv(t)
+	s1 := v.remote(1, map[string]string{pathA: "a1"})
+	s2 := v.remote(2, map[string]string{pathA: "a2"})
+	v.synced(s2, map[string]string{pathA: "a2"})
+	v.writeLocal(pathA, "a2")
+	ps := points(t, v)
+	want := []RestorePoint{{Name: s2.String(), Time: s2.Time, From: "NJ", Current: true}, {Name: s1.String(), Time: s1.Time, From: "NJ"}}
+	if !reflect.DeepEqual(ps, want) {
+		t.Fatalf("got %+v\nwant %+v", ps, want)
+	}
+}
+
+func TestStatusPointsNoneCurrentWithLocalChanges(t *testing.T) {
+	v := newEnv(t)
+	s1 := v.remote(1, map[string]string{pathA: "a1"})
+	v.synced(s1, map[string]string{pathA: "a1"})
+	v.writeLocal(pathA, "edited")
+	if c := current(points(t, v)); c != "" {
+		t.Fatalf("current = %q, want none", c)
+	}
+}
+
+func TestStatusPointsUnknownPC(t *testing.T) {
+	v := newEnv(t)
+	v.remote(1, map[string]string{pathA: "a1"})
+	if err := os.Remove(filepath.Join(v.sync.Root, "machines", njUUID+".json")); err != nil {
+		t.Fatal(err)
+	}
+	if ps := points(t, v); len(ps) != 1 || ps[0].From != njUUID[:8] {
+		t.Fatalf("got %+v, want From %q", ps, njUUID[:8])
+	}
+}
+
+func TestStatusPointsRestored(t *testing.T) {
+	v := newEnv(t)
+	s1 := v.remote(1, map[string]string{pathA: "a1"})
+	s2 := v.remote(2, map[string]string{pathA: "a2"})
+	v.writeLocal(pathA, "a1")
+	st := local.FlavorState{Base: s2.String(), Files: map[string]string{pathA: collect.Hash([]byte("a2"))},
+		Restored: s1.String(), RestoredFiles: map[string]string{pathA: collect.Hash([]byte("a1"))}}
+	if err := v.eng.Store.SaveState("retail", st); err != nil {
+		t.Fatal(err)
+	}
+	if c := current(points(t, v)); c != s1.String() {
+		t.Fatalf("current = %q, want %q", c, s1)
+	}
+	v.writeLocal(pathA, "edited")
+	if c := current(points(t, v)); c != "" {
+		t.Fatalf("after an edit current = %q, want none", c)
 	}
 }
 

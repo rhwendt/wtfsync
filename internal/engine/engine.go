@@ -183,6 +183,7 @@ func (e *Engine) merge(f wow.Flavor, d *syncdir.Dir, st local.FlavorState, n syn
 		}
 	}
 	st.Base, st.Files = n.String(), m.Files
+	st.Restored, st.RestoredFiles = "", nil // a new base: what was restored is merged in now
 	return st, e.Store.SaveState(f.Name, st)
 }
 

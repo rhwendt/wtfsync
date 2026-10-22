@@ -2,6 +2,7 @@ package app
 
 import (
 	"encoding/json"
+	"os"
 	"reflect"
 	"strings"
 	"testing"
@@ -18,11 +19,11 @@ func TestBadgeMostImportantFirst(t *testing.T) {
 		want Badge
 	}{
 		{FlavorView{Name: "retail", Err: "Close WoW (retail) first", Status: engine.Status{PendingPush: true}}, Badge{"error", "!", "Close WoW (retail) first"}},
-		{FlavorView{Status: engine.Status{PendingPush: true, Reachable: true}}, Badge{"error", "!", "Push pending: cloud folder unreachable"}},
+		{FlavorView{Status: engine.Status{PendingPush: true, Reachable: true}}, Badge{"error", "!", "Sync pending: cloud folder unreachable"}},
 		{FlavorView{Status: engine.Status{Base: "b"}}, Badge{"error", "!", "Cloud folder unreachable"}},
 		{FlavorView{Status: engine.Status{Reachable: true, Base: "a", Newest: "b", NewestBy: "leviathan", LocalChanges: 3}}, Badge{"newer", "↓", "leviathan has newer settings"}},
-		{FlavorView{Status: engine.Status{Reachable: true, Base: "b", Newest: "b", LocalChanges: 26}}, Badge{"changes", "↑ 26", "26 changes to push"}},
-		{FlavorView{Status: engine.Status{Reachable: true, Base: "b", Newest: "b", LocalChanges: 1}}, Badge{"changes", "↑ 1", "1 change to push"}},
+		{FlavorView{Status: engine.Status{Reachable: true, Base: "b", Newest: "b", LocalChanges: 26}}, Badge{"changes", "↑ 26", "26 changes to sync"}},
+		{FlavorView{Status: engine.Status{Reachable: true, Base: "b", Newest: "b", LocalChanges: 1}}, Badge{"changes", "↑ 1", "1 change to sync"}},
 		{FlavorView{Status: engine.Status{Reachable: true}}, Badge{"new", "new", "Not synced yet"}},
 		{FlavorView{Status: ok}, Badge{"ok", "✓", "In sync"}},
 	} {
@@ -63,10 +64,10 @@ func TestStatusLine(t *testing.T) {
 		want string
 	}{
 		{engine.Status{}, "Never synced"},
-		{engine.Status{Newest: oct20, NewestBy: "leviathan"}, "Never synced · leviathan pushed Oct 20, 03:51"},
+		{engine.Status{Newest: oct20, NewestBy: "leviathan"}, "Never synced · leviathan synced Oct 20, 03:51"},
 		{engine.Status{Base: today, BaseBy: "leviathan", Newest: today, NewestBy: "leviathan"}, "Last synced today 03:51 · newest from leviathan"},
 		{engine.Status{Base: today, Newest: today}, "Last synced today 03:51"},
-		{engine.Status{Base: oct19, BaseBy: "beehive", Newest: oct20, NewestBy: "leviathan"}, "Last synced Oct 19, 02:07 · leviathan pushed Oct 20, 03:51"},
+		{engine.Status{Base: oct19, BaseBy: "beehive", Newest: oct20, NewestBy: "leviathan"}, "Last synced Oct 19, 02:07 · leviathan synced Oct 20, 03:51"},
 		{engine.Status{Base: oct19}, "Last synced Oct 19, 02:07"}, // cloud folder unreachable: no newest
 	} {
 		if got := statusLine(tt.s, now); got != tt.want {
@@ -75,12 +76,12 @@ func TestStatusLine(t *testing.T) {
 	}
 }
 
-func TestMainShowsBackupsAndMissingAddons(t *testing.T) {
+func TestMainShowsRestorePointsAndMissingAddons(t *testing.T) {
 	nj, _, njApp, nyApp := linked(t)
 	nj.install("Plater", "## X-Curse-Project-ID: 100547")
 	nj.write(svA, "a-nj")
-	njApp.Push()
-	if err := nyApp.Pull(); err != nil {
+	njApp.Sync()
+	if err := nyApp.Sync(); err != nil {
 		t.Fatal(err)
 	}
 	m := nyApp.Main()
@@ -94,13 +95,24 @@ func TestMainShowsBackupsAndMissingAddons(t *testing.T) {
 	if !strings.HasPrefix(f.Line, "Last synced today ") || !strings.HasSuffix(f.Line, " · newest from NJ") {
 		t.Fatalf("line %q", f.Line)
 	}
-	// Newest first: this pull's backup (linking made an earlier one).
-	if len(f.Backups) == 0 || f.Backups[0].Reason != "before pull from NJ" || f.Backups[0].Files != 1 || !strings.HasPrefix(f.Backups[0].When, "today ") {
-		t.Fatalf("backups %+v", f.Backups)
+	// Newest first: NJ's sync, then the one it made when it was set up.
+	if len(f.Points) != 2 || f.Unreachable || !f.Points[0].Current || f.Points[0].From != "NJ" || !strings.HasPrefix(f.Points[0].When, "today ") || f.Points[1].Current {
+		t.Fatalf("points %+v", f.Points)
 	}
 	want := []MissingGroup{{PC: "NJ", Addons: []MissingAddon{{Name: "Plater", URL: "https://www.curseforge.com/projects/100547", Folders: "Plater"}}}}
 	if !reflect.DeepEqual(f.Missing, want) {
 		t.Fatalf("missing %+v", f.Missing)
+	}
+}
+
+func TestMainUnreachableHasNoPoints(t *testing.T) {
+	_, ny, _, nyApp := linked(t)
+	if err := os.Rename(ny.sync, ny.sync+".away"); err != nil {
+		t.Fatal(err)
+	}
+	nyApp.Refresh()
+	if f := nyApp.Main().Flavors[0]; !f.Unreachable || len(f.Points) != 0 {
+		t.Fatalf("flavor %+v", f)
 	}
 }
 

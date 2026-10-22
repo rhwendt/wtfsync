@@ -33,11 +33,11 @@ func logged(a *App) *logBuf {
 func TestActionsAreLoggedWithHowLongTheyTook(t *testing.T) {
 	_, _, _, nyApp := linked(t)
 	out := logged(nyApp)
-	if err := nyApp.Push(); err != nil {
+	if err := nyApp.Sync(); err != nil {
 		t.Fatal(err)
 	}
-	contains(t, out.String(), "pushing: started")
-	contains(t, out.String(), "pushing: done in ")
+	contains(t, out.String(), "syncing: started")
+	contains(t, out.String(), "syncing: done in ")
 }
 
 func TestFailedSetupIsLogged(t *testing.T) {
@@ -67,7 +67,7 @@ func TestQuickActionDumpsNothing(t *testing.T) {
 	out := logged(nyApp)
 	nyApp.d.StallAfter = time.Hour
 	nyApp.d.Stacks = func() []byte { t.Error("stacks dumped for a quick action"); return nil }
-	if err := nyApp.Push(); err != nil {
+	if err := nyApp.Sync(); err != nil {
 		t.Fatal(err)
 	}
 	time.Sleep(20 * time.Millisecond)

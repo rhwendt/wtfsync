@@ -3,6 +3,9 @@ package engine
 import (
 	"errors"
 	"fmt"
+	"maps"
+	"slices"
+	"time"
 
 	"github.com/rhwendt/wtfsync/internal/collect"
 	"github.com/rhwendt/wtfsync/internal/local"
@@ -22,6 +25,16 @@ type Status struct {
 	PendingPush  bool
 
 	MissingAddons []OtherAddons // addons other PCs have that this one doesn't
+
+	Points []RestorePoint // the snapshots kept in the sync folder, newest first; nil when unreachable
+}
+
+// RestorePoint is one snapshot this PC could go back to.
+type RestorePoint struct {
+	Name    string    // snapshot name
+	Time    time.Time // when it was pushed, UTC
+	From    string    // display name of the PC that pushed it; the start of its id when unknown
+	Current bool      // this PC's files match it
 }
 
 func (e *Engine) Status(f wow.Flavor) (Status, error) {
@@ -33,7 +46,8 @@ func (e *Engine) Status(f wow.Flavor) (Status, error) {
 	if err != nil {
 		return Status{}, err
 	}
-	s := Status{Flavor: f.Name, Base: st.Base, PendingPush: st.PendingPush, LocalChanges: changed(st.Files, collect.Hashes(files))}
+	hashes := collect.Hashes(files)
+	s := Status{Flavor: f.Name, Base: st.Base, PendingPush: st.PendingPush, LocalChanges: changed(st.Files, hashes)}
 	d, err := syncdir.Open(e.Settings.SyncFolder, e.Hydrator)
 	if errors.Is(err, syncdir.ErrUnreachable) {
 		return s, nil
@@ -43,6 +57,9 @@ func (e *Engine) Status(f wow.Flavor) (Status, error) {
 	}
 	s.Reachable = true
 	s.MissingAddons = e.missingAddons(f, d)
+	if s.Points, err = restorePoints(d, f.Name, st, hashes, s.LocalChanges); err != nil {
+		return s, err
+	}
 	if b, ok := syncdir.ParseName(s.Base); ok {
 		if m, err := d.Machine(b.UUID); err == nil {
 			s.BaseBy = m.Name
@@ -57,6 +74,37 @@ func (e *Engine) Status(f wow.Flavor) (Status, error) {
 		s.NewestBy = m.Name
 	}
 	return s, nil
+}
+
+// restorePoints lists flavor's snapshots newest first. The current one comes from local state, so
+// no snapshot is opened: the one restored while the files still match it, else the base when
+// nothing changed since.
+func restorePoints(d *syncdir.Dir, flavor string, st local.FlavorState, hashes map[string]string, changes int) ([]RestorePoint, error) {
+	all, err := d.Snapshots(flavor)
+	if err != nil {
+		return nil, err
+	}
+	names := map[string]string{}
+	machines, _ := d.Machines() // unreadable records just show the PC's id
+	for _, m := range machines {
+		names[m.UUID] = m.Name
+	}
+	cur := ""
+	switch {
+	case st.Restored != "" && maps.Equal(st.RestoredFiles, hashes):
+		cur = st.Restored
+	case changes == 0:
+		cur = st.Base
+	}
+	out := []RestorePoint{}
+	for _, n := range slices.Backward(all) {
+		from := names[n.UUID]
+		if from == "" {
+			from = n.UUID[:8]
+		}
+		out = append(out, RestorePoint{Name: n.String(), Time: n.Time, From: from, Current: n.String() == cur})
+	}
+	return out, nil
 }
 
 // RestoreReport describes what Restore did (or, with DryRun, would do).

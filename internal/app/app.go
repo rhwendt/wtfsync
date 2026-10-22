@@ -31,7 +31,7 @@ type Notice struct {
 	ID     string // one per kind of event and flavor, so a newer one replaces an older one
 	Title  string
 	Body   string
-	Action string // what clicking it does: "pull", "addons", or "" (nothing)
+	Action string // what clicking it does: "sync", "addons", or "" (nothing)
 }
 
 // Updates is where new releases come from (update.Checker in the real app).
@@ -219,7 +219,7 @@ func (a *App) Tick() {
 		a.mu.Unlock()
 		if announce {
 			a.d.Notify(Notice{ID: "new-" + f.Name, Title: "New settings for " + f.Name,
-				Body: f.Status.NewestBy + " pushed new settings.", Action: "pull"})
+				Body: f.Status.NewestBy + " synced new settings.", Action: "sync"})
 		}
 	}
 }
@@ -384,30 +384,17 @@ func (a *App) perform(what, only string, record bool, fn func(eng *engine.Engine
 	return errors.Join(errs...)
 }
 
-// Push pushes every enabled flavor.
-func (a *App) Push() error { return a.push("") }
+// Sync syncs every enabled flavor: it merges what other PCs synced, then uploads this PC's changes
+// (engine.Push does both), and announces addons other PCs have that this one doesn't when that
+// list has grown.
+func (a *App) Sync() error { return a.sync("") }
 
-// PushFlavor pushes one enabled flavor.
-func (a *App) PushFlavor(name string) error { return a.push(name) }
+// SyncFlavor syncs one enabled flavor.
+func (a *App) SyncFlavor(name string) error { return a.sync(name) }
 
-func (a *App) push(only string) error {
-	return a.run(doing("pushing", only), only, func(eng *engine.Engine, f wow.Flavor) error {
+func (a *App) sync(only string) error {
+	err := a.run(doing("syncing", only), only, func(eng *engine.Engine, f wow.Flavor) error {
 		_, err := eng.Push(f, engine.Options{})
-		return err
-	})
-}
-
-// Pull pulls every enabled flavor (retrying a pending push first, as the CLI does) and then
-// announces addons other PCs have that this one doesn't, when that list has grown.
-func (a *App) Pull() error { return a.pull("") }
-
-// PullFlavor pulls one enabled flavor.
-func (a *App) PullFlavor(name string) error { return a.pull(name) }
-
-func (a *App) pull(only string) error {
-	err := a.run(doing("pulling", only), only, func(eng *engine.Engine, f wow.Flavor) error {
-		a.retryPending(eng, []wow.Flavor{f})
-		_, err := eng.Pull(f, engine.Options{})
 		return err
 	})
 	v := a.View()
@@ -430,40 +417,27 @@ func doing(what, only string) string {
 	return what + " " + only
 }
 
-// RestorePreview lists what restoring one of flavor's backup sets (id "" = the newest) would change.
-func (a *App) RestorePreview(flavor, id string) (engine.RestoreReport, error) {
-	eng, f, err := a.flavor(flavor)
-	if err != nil {
-		return engine.RestoreReport{}, err
-	}
-	rep, err := eng.Restore(f, id, engine.Options{DryRun: true})
-	return rep, gone(err)
-}
-
-// Restore puts one of flavor's backup sets back (id "" = the newest), backing up what it replaces.
-func (a *App) Restore(flavor, id string) (engine.RestoreReport, error) {
-	var rep engine.RestoreReport
+// RestorePoint puts flavor back as it was at snapshot name, saving what it replaces first, and
+// returns that backup's id ("" when nothing needed replacing).
+func (a *App) RestorePoint(flavor, name string) (string, error) {
+	var undo string
 	err := a.perform("restoring "+flavor, flavor, false, func(eng *engine.Engine, f wow.Flavor) error {
-		var err error
-		rep, err = eng.Restore(f, id, engine.Options{})
+		rep, err := eng.RestoreSnapshot(f, name, engine.Options{})
+		undo = rep.Undo
 		return err
 	})
-	return rep, gone(err)
-}
-
-// backupGone is a restore of a set that was pruned since the list was shown, in the words the
-// window shows. It still matches local.ErrNoBackup.
-type backupGone struct{ err error }
-
-func (e backupGone) Error() string { return "That backup no longer exists" }
-func (e backupGone) Unwrap() error { return e.err }
-
-func gone(err error) error {
-	if errors.Is(err, local.ErrNoBackup) {
-		return backupGone{err}
+	if errors.Is(err, engine.ErrNoRestorePoint) {
+		return "", pointGone{err}
 	}
-	return err
+	return undo, err
 }
+
+// pointGone is a restore of a snapshot pruned since the list was shown, in the words the window
+// shows. It still matches engine.ErrNoRestorePoint.
+type pointGone struct{ err error }
+
+func (e pointGone) Error() string { return "That restore point no longer exists" }
+func (e pointGone) Unwrap() error { return e.err }
 
 // FlavorNames lists the flavors in a WoW folder, sorted; empty when it isn't one. The Settings page
 // uses it when the WoW folder is changed.

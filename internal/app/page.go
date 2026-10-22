@@ -6,14 +6,13 @@ import (
 	"time"
 
 	"github.com/rhwendt/wtfsync/internal/engine"
-	"github.com/rhwendt/wtfsync/internal/local"
 	"github.com/rhwendt/wtfsync/internal/syncdir"
 )
 
 // MainPage is everything the main window shows.
 type MainPage struct {
 	SetUp      bool
-	Busy       string // what's running ("pulling classic"); "" when idle
+	Busy       string // what's running ("syncing classic"); "" when idle
 	PC         string // this PC's name
 	Version    string
 	Update     string // newer version on offer; "" when none
@@ -23,26 +22,27 @@ type MainPage struct {
 
 // FlavorPage is one flavor: its row in the list and its page.
 type FlavorPage struct {
-	Name    string
-	Badge   Badge
-	Line    string // "Last synced today 03:51 · newest from leviathan"
-	Backups []BackupItem
-	Missing []MissingGroup
+	Name        string
+	Badge       Badge
+	Line        string // "Last synced today 03:51 · newest from leviathan"
+	Points      []PointItem
+	Unreachable bool // the cloud folder can't be reached, so there are no points to list
+	Missing     []MissingGroup
 }
 
 // Badge is a flavor's state in a few characters (the list) and in words (its page).
 type Badge struct {
 	Kind  string // "error", "newer", "changes", "new" or "ok": the colour
 	Short string // "!", "↓", "↑ 26", "new", "✓"
-	Words string // "Cloud folder unreachable", "leviathan has newer settings", "26 changes to push", …
+	Words string // "Cloud folder unreachable", "leviathan has newer settings", "26 changes to sync", …
 }
 
-// BackupItem is one backup set in the list.
-type BackupItem struct {
-	ID     string
-	When   string // "today 03:51"
-	Reason string // "before pull from leviathan", "before restore", or "" for older backups
-	Files  int
+// PointItem is one restore point in the list.
+type PointItem struct {
+	Name    string // snapshot name, passed back to RestorePoint
+	When    string // "today 03:51"
+	From    string // the PC that synced it
+	Current bool   // this PC's files match it: nothing to restore
 }
 
 // MissingGroup is the addons one other PC has that this one doesn't.
@@ -57,8 +57,7 @@ type MissingAddon struct {
 	Folders string // "ElvUI, ElvUI_Options"
 }
 
-// Main is the main window's data. It reads what the last refresh found plus the backups on disk;
-// it never refreshes or calls Changed, because the window reloads it on every Changed.
+// Main is the main window's data. It reads what the last refresh found; it never refreshes or calls Changed, because the window reloads it on every Changed.
 func (a *App) Main() MainPage {
 	v := a.View()
 	m := MainPage{SetUp: v.SetUp, Busy: v.Busy, Version: a.d.Version, Update: v.Update, Appearance: "system", Flavors: []FlavorPage{}}
@@ -68,34 +67,21 @@ func (a *App) Main() MainPage {
 	now := a.d.Now()
 	for _, f := range v.Flavors {
 		m.Flavors = append(m.Flavors, FlavorPage{
-			Name:    f.Name,
-			Badge:   badge(f),
-			Line:    statusLine(f.Status, now),
-			Backups: a.backups(f.Name, now),
-			Missing: missingGroups(f.Status),
+			Name:        f.Name,
+			Badge:       badge(f),
+			Line:        statusLine(f.Status, now),
+			Points:      points(f.Status, now),
+			Unreachable: !f.Status.Reachable,
+			Missing:     missingGroups(f.Status),
 		})
 	}
 	return m
 }
 
-func (a *App) backups(flavor string, now time.Time) []BackupItem {
-	out := []BackupItem{}
-	sets, err := a.d.Store.Backups(flavor)
-	if err != nil {
-		a.d.Log.Printf("backups %s: %v", flavor, err)
-		return out
-	}
-	for _, b := range sets {
-		item := BackupItem{ID: b.ID, When: when(b.Time, now), Files: b.Files}
-		switch {
-		case b.Reason == local.ReasonPull && b.From != "":
-			item.Reason = "before pull from " + b.From
-		case b.Reason == local.ReasonPull:
-			item.Reason = "before pull"
-		case b.Reason == local.ReasonRestore:
-			item.Reason = "before restore"
-		}
-		out = append(out, item)
+func points(s engine.Status, now time.Time) []PointItem {
+	out := []PointItem{}
+	for _, p := range s.Points {
+		out = append(out, PointItem{Name: p.Name, When: when(p.Time, now), From: p.From, Current: p.Current})
 	}
 	return out
 }
@@ -119,13 +105,13 @@ func badge(f FlavorView) Badge {
 	case f.Err != "":
 		return Badge{"error", "!", f.Err}
 	case s.PendingPush:
-		return Badge{"error", "!", "Push pending: cloud folder unreachable"}
+		return Badge{"error", "!", "Sync pending: cloud folder unreachable"}
 	case !s.Reachable:
 		return Badge{"error", "!", "Cloud folder unreachable"}
 	case f.newer():
 		return Badge{"newer", "↓", s.NewestBy + " has newer settings"}
 	case s.LocalChanges > 0:
-		return Badge{"changes", fmt.Sprintf("↑ %d", s.LocalChanges), plural(s.LocalChanges, "change") + " to push"}
+		return Badge{"changes", fmt.Sprintf("↑ %d", s.LocalChanges), plural(s.LocalChanges, "change") + " to sync"}
 	case s.Base == "":
 		return Badge{"new", "new", "Not synced yet"}
 	}
@@ -145,7 +131,7 @@ func statusLine(s engine.Status, now time.Time) string {
 	newest, hasNewest := syncdir.ParseName(s.Newest)
 	switch {
 	case !hasBase && hasNewest:
-		return fmt.Sprintf("Never synced · %s pushed %s", s.NewestBy, when(newest.Time, now))
+		return fmt.Sprintf("Never synced · %s synced %s", s.NewestBy, when(newest.Time, now))
 	case !hasBase:
 		return "Never synced"
 	case !hasNewest:
@@ -155,7 +141,7 @@ func statusLine(s engine.Status, now time.Time) string {
 	case s.Base == s.Newest:
 		return "Last synced " + when(base.Time, now)
 	}
-	return fmt.Sprintf("Last synced %s · %s pushed %s", when(base.Time, now), s.NewestBy, when(newest.Time, now))
+	return fmt.Sprintf("Last synced %s · %s synced %s", when(base.Time, now), s.NewestBy, when(newest.Time, now))
 }
 
 // when is t in now's time zone, as a person would say it.

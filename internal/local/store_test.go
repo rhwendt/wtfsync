@@ -2,6 +2,7 @@ package local
 
 import (
 	"errors"
+	"os"
 	"reflect"
 	"regexp"
 	"testing"
@@ -34,6 +35,24 @@ func TestStateRoundTrip(t *testing.T) {
 	}
 	if got, err := s.LoadState("retail"); err != nil || !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %+v, %v", got, err)
+	}
+}
+
+func TestStateRestoredRoundTrip(t *testing.T) {
+	s := Store{Dir: t.TempDir()}
+	want := FlavorState{Base: "b", Files: map[string]string{"a": "sha256:1"}, Restored: "r", RestoredFiles: map[string]string{"a": "sha256:2"}}
+	if err := s.SaveState("retail", want); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := s.LoadState("retail"); err != nil || !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %+v, %v", got, err)
+	}
+	// A state file from before restore points has neither field.
+	if err := os.WriteFile(s.statePath("classic"), []byte(`{"base":"x","files":{}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := s.LoadState("classic"); err != nil || got.Restored != "" || got.RestoredFiles != nil || got.Base != "x" {
+		t.Fatalf("old state = %+v, %v", got, err)
 	}
 }
 
