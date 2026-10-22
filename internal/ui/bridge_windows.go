@@ -108,6 +108,9 @@ func (b *Bridge) InstallUpdate()                            { go b.u.installUpda
 func (b *Bridge) OpenLogFolder()                            { b.u.openLogFolder() }
 func (b *Bridge) CloudFolder(folder string) app.CloudFolder { return b.u.app.CloudFolder(folder) }
 
+// FlavorNames lists a WoW folder's flavors, for the Settings switches when the folder changes.
+func (b *Bridge) FlavorNames(wowDir string) []string { return b.u.app.FlavorNames(wowDir) }
+
 // OpenURL opens an addon's download page; only https links are followed.
 func (b *Bridge) OpenURL(url string) error {
 	if !strings.HasPrefix(url, "https://") {

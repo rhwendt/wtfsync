@@ -140,14 +140,27 @@ async function settingsPage() {
   try {
     s = await call("Settings");
   } catch (e) {
-    return show(h("p", { class: "error" }, errorText(e)));
+    s = null;
+    if (view === "settings") show(h("p", { class: "error" }, errorText(e)));
   }
+  if (view !== "settings" || !s) { settingsShown = false; return; } // left Settings while it loaded
   const name = h("input", { type: "text", value: s.Name });
   const wow = folderPicker([], s.WoWDir, "Your World of Warcraft folder");
   const cloud = folderPicker([], s.SyncFolder, "A folder your cloud client syncs");
   const all = h("input", { type: "checkbox", class: "switch", checked: s.AllFlavors });
-  const toggles = s.Flavors.map((t) => ({ name: t.Name, box: h("input", { type: "checkbox", class: "switch", checked: t.On }) }));
-  const each = h("div", { class: "flavors", hidden: s.AllFlavors }, toggles.map((t) => h("label", { class: "inline" }, t.box, t.name)));
+  let toggles = [];
+  const each = h("div", { class: "flavors", hidden: s.AllFlavors });
+  const drawToggles = (list) => {
+    toggles = list.map((t) => ({ name: t.Name, box: h("input", { type: "checkbox", class: "switch", checked: t.On }) }));
+    each.replaceChildren(...toggles.map((t) => h("label", { class: "inline" }, t.box, t.name)));
+  };
+  drawToggles(s.Flavors);
+  // A different WoW folder has its own flavors: keep the choices for names it shares, new ones off.
+  wow.select.addEventListener("change", async () => {
+    const was = Object.fromEntries(toggles.map((t) => [t.name, t.box.checked]));
+    const names = await call("FlavorNames", wow.value());
+    drawToggles(names.map((n) => ({ Name: n, On: !!was[n] })));
+  });
   all.addEventListener("change", () => { each.hidden = all.checked; });
   const login = h("input", { type: "checkbox", class: "switch", checked: s.StartAtLogin });
   const theme = h("div", { class: "seg" }, [["system", "System"], ["light", "Light"], ["dark", "Dark"]].map(([v, label]) =>
@@ -156,7 +169,25 @@ async function settingsPage() {
       call("SetAppearance", v).catch((e) => { note = { text: errorText(e), error: true }; drawNote(); });
     } }), label)));
   const field = (label, ...el) => h("div", { class: "field" }, h("label", {}, label), ...el);
-  const about = data.Update ? `wtfsync ${data.Version} · ${data.Update} available` : `wtfsync ${data.Version} · up to date`;
+  const aboutText = () => (data.Update ? `wtfsync ${data.Version} · ${data.Update} available` : `wtfsync ${data.Version} · up to date`);
+  const about = h("span", { class: "grow" }, aboutText());
+  const updateBtn = h("span", {});
+  const drawUpdate = () => {
+    about.textContent = aboutText();
+    updateBtn.replaceChildren(data.Update ? h("button", { class: "primary", onclick: () => call("InstallUpdate") }, "Update to " + data.Update) : "");
+  };
+  drawUpdate();
+  const checkUpdates = async () => {
+    note = null;
+    try {
+      await call("CheckUpdate");
+      data = await call("Main"); // only the About row changes: unsaved edits stay
+      drawUpdate();
+    } catch (e) {
+      note = { text: "Couldn't check for updates: " + errorText(e), error: true };
+    }
+    drawNote();
+  };
   const save = h("button", { class: "primary", onclick: () => run(async () => {
     const lines = await call("SaveSettings", {
       Name: name.value, WoWDir: wow.value(), SyncFolder: cloud.value(), AllFlavors: all.checked,
@@ -174,9 +205,8 @@ async function settingsPage() {
     h("h2", {}, "Appearance"), theme,
     h("h2", {}, "Startup"), h("label", { class: "inline" }, login, "Start wtfsync when Windows starts"),
     h("h2", {}, "About"),
-    h("div", { class: "row" }, h("span", { class: "grow" }, about),
-      h("button", { onclick: () => run(async () => { await call("CheckUpdate"); settingsShown = false; }) }, "Check for updates"),
-      data.Update ? h("button", { class: "primary", onclick: () => call("InstallUpdate") }, "Update to " + data.Update) : "",
+    h("div", { class: "row" }, about,
+      h("button", { onclick: checkUpdates }, "Check for updates"), updateBtn,
       h("button", { onclick: () => call("OpenLogFolder") }, "Open log folder")),
     h("div", { class: "row end" },
       h("button", { onclick: () => go("wizard") }, "Run setup again…"), h("span", { class: "grow" }),
@@ -189,6 +219,7 @@ function startWizard() {
   const from = data.SetUp ? (settingsShown ? "settings" : "flavor") : null;
   settingsShown = false;
   wizard($("#page"), {
+    current: () => view === "wizard",
     start: Math.max(0, Number(params.get("step") || 1) - 1),
     done: () => { view = "flavor"; load(); },
     // On a PC that isn't set up, Cancel just hides the window; the tray still offers Set up.
@@ -202,5 +233,11 @@ $("#gear").onclick = () => go("settings");
 
 let pending = null; // coalesce bursts of "changed" (a sync emits several)
 on("changed", () => { clearTimeout(pending); pending = setTimeout(load, 150); });
-on("show", (v) => { if (v) go(v); else load(); });
+on("show", (v) => {
+  if (v && v.startsWith("flavor:")) {
+    if (v.length > 7) { flavor = v.slice(7); remember(flavor); }
+    go("flavor");
+  } else if (v) go(v);
+  else load();
+});
 await load();

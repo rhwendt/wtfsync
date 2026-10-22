@@ -10,10 +10,12 @@ import (
 	"fmt"
 	"log"
 	"log/slog"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -167,8 +169,10 @@ func (u *UI) do(id string) {
 		go u.installUpdate()
 	case "quit":
 		go u.quit()
-	case "open", "addons":
+	case "open":
 		u.showMain("")
+	case "addons":
+		u.showMain("flavor:" + app.FirstMissing(u.app.View()))
 	case "setup":
 		u.showMain("wizard")
 	case "settings":
@@ -253,7 +257,8 @@ func (u *UI) open(name string) {
 }
 
 // showMain opens the main window, or brings it to the front, on view ("" keeps what it shows;
-// "settings" or "wizard"). Closing it only hides it. Each time it's shown, status is refreshed.
+// "settings", "wizard", or "flavor:<name>"). Closing it only hides it. Each time it's shown,
+// status is refreshed.
 func (u *UI) showMain(view string) {
 	go u.app.Refresh()
 	application.InvokeAsync(func() {
@@ -263,11 +268,13 @@ func (u *UI) showMain(view string) {
 			w.Focus()
 			return
 		}
-		url := "/main.html"
-		if view != "" {
-			url += "?view=" + view
+		addr := "/main.html"
+		if name, ok := strings.CutPrefix(view, "flavor:"); ok {
+			addr += "?flavor=" + url.QueryEscape(name)
+		} else if view != "" {
+			addr += "?view=" + view
 		}
-		w := u.newWindow("main", "wtfsync", 860, 560, url)
+		w := u.newWindow("main", "wtfsync", 860, 560, addr)
 		w.RegisterHook(events.Common.WindowClosing, func(e *application.WindowEvent) {
 			if u.quitting.Load() {
 				return

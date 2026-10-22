@@ -4,7 +4,7 @@ import { h, call, errorText, folderPicker } from "./app.js";
 const STEPS = ["WoW folder", "Cloud folder", "PC name", "First PC or join", "Sync"];
 
 // wizard runs setup inside root. done() runs after Finish; cancel() on Cancel.
-export async function wizard(root, { start = 0, done, cancel }) {
+export async function wizard(root, { current = () => true, start = 0, done, cancel }) {
   const d = await call("Defaults");
   const wow = folderPicker(d.Installs, d.WoWDir, "Your World of Warcraft folder");
   const cloud = folderPicker(d.Clouds, d.Sync, "A folder your cloud client syncs");
@@ -85,6 +85,7 @@ export async function wizard(root, { start = 0, done, cancel }) {
   }
 
   function draw() {
+    if (!current()) return; // the window moved on while Defaults (a drive scan) was loading
     root.replaceChildren(
       h("div", { class: "steps" }, STEPS.map((s, i) => [
         i ? h("span", { class: "ln" }) : "",
