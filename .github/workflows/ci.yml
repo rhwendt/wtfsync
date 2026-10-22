@@ -57,6 +57,24 @@ jobs:
             dist/wtfsync-tray.exe
             dist/wtfsync-setup.exe
             dist/checksums.txt
+      # PRs that change the pages get fresh screenshots to review (docs/screenshots is refreshed by
+      # hand with the same script).
+      - name: Screenshots of the pages
+        id: shots
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch -q --depth=1 origin "${{ github.base_ref }}"
+          if git diff --quiet FETCH_HEAD -- internal/ui/web; then
+            echo "pages unchanged"
+          else
+            .github/scripts/screenshots.sh dist/screenshots
+            echo "made=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/upload-artifact@v7
+        if: steps.shots.outputs.made == 'true'
+        with:
+          name: screenshots
+          path: dist/screenshots
 
   # Every merge to main whose commits include a feat, fix, perf or breaking change publishes a
   # GitHub Release with the installer, the CLI and their checksums, versioned from the
