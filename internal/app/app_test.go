@@ -12,7 +12,6 @@ import (
 
 	"github.com/rhwendt/wtfsync/internal/collect"
 	"github.com/rhwendt/wtfsync/internal/engine"
-	"github.com/rhwendt/wtfsync/internal/local"
 	"github.com/rhwendt/wtfsync/internal/lock"
 	"github.com/rhwendt/wtfsync/internal/update"
 )
@@ -44,7 +43,7 @@ func TestInSyncAfterSetup(t *testing.T) {
 	if !v.SetUp || v.Icon != Idle || v.Tooltip != "wtfsync — in sync" || len(v.Flavors) != 1 {
 		t.Fatalf("view %+v", v)
 	}
-	want := []string{"open", "push", "pull", "settings", "-", "logs", "quit"}
+	want := []string{"open", "sync", "settings", "-", "logs", "quit"}
 	if got := ids(Menu(v)); !reflect.DeepEqual(got, want) {
 		t.Fatalf("menu %v, want %v", got, want)
 	}
@@ -53,7 +52,7 @@ func TestInSyncAfterSetup(t *testing.T) {
 func TestTickAnnouncesNewSettingsOnce(t *testing.T) {
 	nj, ny, njApp, nyApp := linked(t)
 	nj.write(svA, "a-nj")
-	if err := njApp.Push(); err != nil {
+	if err := njApp.Sync(); err != nil {
 		t.Fatal(err)
 	}
 	nyApp.Tick()
@@ -62,28 +61,28 @@ func TestTickAnnouncesNewSettingsOnce(t *testing.T) {
 		t.Fatalf("notices %v, want one new-retail", got)
 	}
 	n := ny.notices.find(t, "new-retail")
-	if n.Action != "pull" || n.Body != "NJ pushed new settings." {
+	if n.Action != "sync" || n.Body != "NJ synced new settings." {
 		t.Fatalf("notice %+v", n)
 	}
 	v := nyApp.View()
 	if v.Icon != NewSettings || v.Tooltip != "retail: NJ has newer settings" {
 		t.Fatalf("view %+v", v)
 	}
-	if err := nyApp.Pull(); err != nil {
+	if err := nyApp.Sync(); err != nil {
 		t.Fatal(err)
 	}
 	ny.want(svA, "a-nj")
 	if v := nyApp.View(); v.Icon != Idle {
-		t.Fatalf("after pull: %+v", v)
+		t.Fatalf("after sync: %+v", v)
 	}
 }
 
-func TestPullAnnouncesMissingAddons(t *testing.T) {
+func TestSyncAnnouncesMissingAddons(t *testing.T) {
 	nj, ny, njApp, nyApp := linked(t)
 	nj.install("Plater", "## X-Curse-Project-ID: 100547")
 	nj.write("Account/123#1/SavedVariables/Plater.lua", "p")
-	njApp.Push()
-	if err := nyApp.Pull(); err != nil {
+	njApp.Sync()
+	if err := nyApp.Sync(); err != nil {
 		t.Fatal(err)
 	}
 	if n := ny.notices.find(t, "addons"); n.Action != "addons" {
@@ -94,7 +93,7 @@ func TestPullAnnouncesMissingAddons(t *testing.T) {
 		t.Fatalf("view %+v", v)
 	}
 	contains(t, v.Tooltip, "1 addon(s) missing here")
-	nyApp.Pull() // same list again: no second notice
+	nyApp.Sync() // same list again: no second notice
 	if n := len(ny.notices.ids()); n != 1 {
 		t.Fatalf("notices %v", ny.notices.ids())
 	}
@@ -103,9 +102,9 @@ func TestPullAnnouncesMissingAddons(t *testing.T) {
 func TestGameRunningRefusesAndExplains(t *testing.T) {
 	nj, ny, njApp, nyApp := linked(t)
 	nj.write(svA, "a-nj")
-	njApp.Push()
+	njApp.Sync()
 	ny.procs.running = true
-	if err := nyApp.Pull(); !errors.Is(err, engine.ErrGameRunning) {
+	if err := nyApp.Sync(); !errors.Is(err, engine.ErrGameRunning) {
 		t.Fatalf("err = %v", err)
 	}
 	ny.want(svA, "a0")
@@ -117,22 +116,22 @@ func TestGameRunningRefusesAndExplains(t *testing.T) {
 		t.Fatalf("view %+v", v)
 	}
 	ny.procs.running = false
-	nyApp.Pull()
+	nyApp.Sync()
 	if v := nyApp.View(); v.Icon != Idle || v.Flavors[0].Err != "" {
-		t.Fatalf("error not cleared by a good pull: %+v", v)
+		t.Fatalf("error not cleared by a good sync: %+v", v)
 	}
 }
 
 func TestSyncAlreadyRunningElsewhere(t *testing.T) {
 	nj, ny, njApp, nyApp := linked(t)
 	nj.write(svA, "a-nj")
-	njApp.Push()
+	njApp.Sync()
 	held, err := lock.Acquire(ny.store.Dir) // the CLI is pulling
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer held.Release()
-	if err := nyApp.Pull(); !errors.Is(err, lock.ErrHeld) {
+	if err := nyApp.Sync(); !errors.Is(err, lock.ErrHeld) {
 		t.Fatalf("err = %v", err)
 	}
 	if n := ny.notices.find(t, "busy"); n.Body != "A sync is already running." {
@@ -144,11 +143,11 @@ func TestSyncAlreadyRunningElsewhere(t *testing.T) {
 func TestCancelledConflictChangesNothing(t *testing.T) {
 	nj, ny, njApp, _ := linked(t)
 	nj.write(svA, "a-nj")
-	njApp.Push()
+	njApp.Sync()
 	ny.write(svA, "a-ny")
 	ny.prompt = prompt{err: engine.ErrAborted}
 	nyApp := ny.app() // picks up the cancelling prompt
-	if err := nyApp.Pull(); !errors.Is(err, engine.ErrAborted) {
+	if err := nyApp.Sync(); !errors.Is(err, engine.ErrAborted) {
 		t.Fatalf("err = %v", err)
 	}
 	ny.want(svA, "a-ny")
@@ -164,7 +163,7 @@ func TestTickRetriesPendingPush(t *testing.T) {
 		t.Fatal(err)
 	}
 	ny.write(svA, "a-ny")
-	nyApp.Push()
+	nyApp.Sync()
 	if v := nyApp.View(); v.Icon != Attention || !v.Flavors[0].Status.PendingPush {
 		t.Fatalf("offline push: %+v", v)
 	}
@@ -178,21 +177,50 @@ func TestTickRetriesPendingPush(t *testing.T) {
 	}
 }
 
-func TestRestoreOneFlavor(t *testing.T) {
+func TestRestorePointPutsAnOlderSyncBack(t *testing.T) {
 	nj, ny, njApp, nyApp := linked(t)
-	nj.write(svA, "a-nj")
-	njApp.Push()
-	nyApp.Pull()
-	prev, err := nyApp.RestorePreview("retail", "")
-	if err != nil || !reflect.DeepEqual(prev.Paths, []string{svA}) || prev.Undo != "" {
-		t.Fatalf("preview %+v, %v", prev, err)
+	nj.write(svA, "a1")
+	njApp.Sync()
+	nyApp.Sync()
+	nj.write(svA, "a2")
+	njApp.Sync()
+	nyApp.Sync()
+	ny.want(svA, "a2")
+	points := nyApp.Main().Flavors[0].Points
+	if len(points) < 3 || !points[0].Current || points[0].From != "NJ" || points[1].Current {
+		t.Fatalf("points %+v", points)
 	}
-	ny.want(svA, "a-nj") // preview changes nothing
-	rep, err := nyApp.Restore("retail", "")
-	if err != nil || rep.Undo == "" {
-		t.Fatalf("restore %+v, %v", rep, err)
+	older := points[1].Name // a1
+	if err := nyApp.RestorePoint("retail", older); err != nil {
+		t.Fatal(err)
+	}
+	ny.want(svA, "a1")
+	f := nyApp.Main().Flavors[0]
+	if f.Points[0].Current || !f.Points[1].Current || f.Badge.Words != "1 change to sync" {
+		t.Fatalf("after restore %+v", f)
+	}
+	// Syncing sends it to the other PC.
+	if err := nyApp.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	njApp.Sync()
+	nj.want(svA, "a1")
+}
+
+func TestRestoreGonePointSaysSo(t *testing.T) {
+	_, ny, _, nyApp := linked(t)
+	err := nyApp.RestorePoint("retail", "000099_20000101T000000Z_00000000-0000-4000-8000-000000000001.tar.gz")
+	if err == nil || err.Error() != "That restore point no longer exists" || !errors.Is(err, engine.ErrNoRestorePoint) {
+		t.Fatalf("err = %v", err)
 	}
 	ny.want(svA, "a0")
+	// Nothing changed, so the flavor doesn't turn red: the page shows the error instead.
+	if b := nyApp.Main().Flavors[0].Badge; b.Kind != "ok" {
+		t.Fatalf("badge %+v", b)
+	}
+	if v := nyApp.View(); v.Icon == Attention || len(ny.notices.ids()) != 0 {
+		t.Fatalf("icon %v, notices %v", v.Icon, ny.notices.ids())
+	}
 }
 
 func TestSaveSettingsRenamesTogglesAndStartsAtLogin(t *testing.T) {
@@ -294,7 +322,7 @@ func TestInstallUpdateFailureRunsNothing(t *testing.T) {
 func TestActionWhileBusyIsRefused(t *testing.T) {
 	_, _, _, nyApp := linked(t)
 	nyApp.begin("pulling")
-	if err := nyApp.Push(); !errors.Is(err, ErrBusy) {
+	if err := nyApp.Sync(); !errors.Is(err, ErrBusy) {
 		t.Fatalf("err = %v", err)
 	}
 	nyApp.end()
@@ -311,7 +339,7 @@ func TestTicksAndActionsAtOnce(t *testing.T) {
 	}()
 	for i := range 10 {
 		ny.write(svA, fmt.Sprintf("a%d", i))
-		if err := nyApp.Push(); err != nil && !errors.Is(err, ErrBusy) {
+		if err := nyApp.Sync(); err != nil && !errors.Is(err, ErrBusy) {
 			t.Fatal(err)
 		}
 	}
@@ -353,7 +381,7 @@ func TestCloseWaitsForTheRunningAction(t *testing.T) {
 	if d := time.Since(start); d < 100*time.Millisecond {
 		t.Fatalf("Close returned after %v, before the action ended", d)
 	}
-	if err := nyApp.Push(); !errors.Is(err, ErrBusy) {
+	if err := nyApp.Sync(); !errors.Is(err, ErrBusy) {
 		t.Fatalf("push after Close: err = %v, want ErrBusy", err)
 	}
 	nyApp.Tick() // must not block or run
@@ -390,15 +418,15 @@ func TestSaveSettingsAllFlavorsOffKeepsALaterFlavorOff(t *testing.T) {
 func TestFlavorActionsActOnOneFlavor(t *testing.T) {
 	nj, ny, njApp, nyApp := linked(t)
 	nj.write(svA, "a-nj")
-	if err := njApp.PushFlavor("retail"); err != nil {
+	if err := njApp.SyncFlavor("retail"); err != nil {
 		t.Fatal(err)
 	}
-	if err := nyApp.PullFlavor("retail"); err != nil {
+	if err := nyApp.SyncFlavor("retail"); err != nil {
 		t.Fatal(err)
 	}
 	ny.want(svA, "a-nj")
-	if err := nyApp.PullFlavor("classic"); err == nil {
-		t.Fatal("pulling a flavor that isn't enabled should fail")
+	if err := nyApp.SyncFlavor("classic"); err == nil {
+		t.Fatal("syncing a flavor that isn't enabled should fail")
 	}
 }
 
@@ -406,63 +434,11 @@ func TestFlavorActionWhileBusyIsRefused(t *testing.T) {
 	_, _, _, nyApp := linked(t)
 	nyApp.begin("pulling")
 	defer nyApp.end()
-	if err := nyApp.PushFlavor("retail"); !errors.Is(err, ErrBusy) {
+	if err := nyApp.SyncFlavor("retail"); !errors.Is(err, ErrBusy) {
 		t.Fatalf("push: %v", err)
 	}
-	if _, err := nyApp.Restore("retail", ""); !errors.Is(err, ErrBusy) {
+	if err := nyApp.RestorePoint("retail", "x"); !errors.Is(err, ErrBusy) {
 		t.Fatalf("restore: %v", err)
-	}
-}
-
-func TestRestoreChosenBackup(t *testing.T) {
-	nj, ny, njApp, nyApp := linked(t)
-	nj.write(svA, "a1")
-	njApp.Push()
-	nyApp.Pull() // backup 1 holds a0
-	nj.write(svA, "a2")
-	njApp.Push()
-	nyApp.Pull() // backup 2 holds a1
-	// Newest first; linking made one more at the end.
-	sets := nyApp.Main().Flavors[0].Backups
-	if len(sets) < 2 {
-		t.Fatalf("backups %+v", sets)
-	}
-	older := sets[1].ID
-	prev, err := nyApp.RestorePreview("retail", older)
-	if err != nil || !reflect.DeepEqual(prev.Paths, []string{svA}) {
-		t.Fatalf("preview %+v, %v", prev, err)
-	}
-	rep, err := nyApp.Restore("retail", older)
-	if err != nil {
-		t.Fatal(err)
-	}
-	ny.want(svA, "a0")
-	after := nyApp.Main().Flavors[0].Backups
-	if after[0].ID != rep.Undo || after[0].Reason != "before restore" {
-		t.Fatalf("undo set %q not first: %+v", rep.Undo, after)
-	}
-}
-
-func TestRestorePrunedBackupSaysSo(t *testing.T) {
-	nj, ny, njApp, nyApp := linked(t)
-	nj.write(svA, "a1")
-	njApp.Push()
-	nyApp.Pull()
-	gone := "20000101T000000.000Z"
-	if _, err := nyApp.RestorePreview("retail", gone); err == nil || err.Error() != "That backup no longer exists" || !errors.Is(err, local.ErrNoBackup) {
-		t.Fatalf("preview err = %v", err)
-	}
-	_, err := nyApp.Restore("retail", gone)
-	if err == nil || err.Error() != "That backup no longer exists" || !errors.Is(err, local.ErrNoBackup) {
-		t.Fatalf("restore err = %v", err)
-	}
-	ny.want(svA, "a1") // nothing written
-	// Nothing changed, so the flavor doesn't turn red: the page shows the error instead.
-	if b := nyApp.Main().Flavors[0].Badge; b.Kind != "ok" {
-		t.Fatalf("badge %+v", b)
-	}
-	if v := nyApp.View(); v.Icon == Attention || len(ny.notices.ids()) != 0 {
-		t.Fatalf("icon %v, notices %v", v.Icon, ny.notices.ids())
 	}
 }
 

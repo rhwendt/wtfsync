@@ -8,7 +8,6 @@ import (
 	"fmt"
 
 	"github.com/rhwendt/wtfsync/internal/engine"
-	"github.com/rhwendt/wtfsync/internal/local"
 )
 
 // IconState is the tray icon, most severe state across flavors.
@@ -48,7 +47,7 @@ func (f FlavorView) issue() (string, IconState) {
 	case f.Err != "":
 		return f.Err, Attention
 	case s.PendingPush:
-		return "push pending (sync folder unreachable)", Attention
+		return "sync pending (sync folder unreachable)", Attention
 	case !s.Reachable:
 		return "sync folder unreachable", Attention
 	case f.missing() > 0:
@@ -62,7 +61,7 @@ func (f FlavorView) issue() (string, IconState) {
 // View is everything the tray renders.
 type View struct {
 	SetUp   bool
-	Busy    string // "pulling", "pushing", "restoring", "setting up", "updating"; "" when idle
+	Busy    string // "syncing", "restoring", "setting up", "updating"; "" when idle
 	Icon    IconState
 	Tooltip string
 	Flavors []FlavorView
@@ -130,8 +129,7 @@ func Menu(v View) []MenuItem {
 	idle := v.Busy == ""
 	m := []MenuItem{
 		{"open", "Open wtfsync", true},
-		{"push", "Push", idle},
-		{"pull", "Pull", idle},
+		{"sync", "Sync", idle},
 		{"settings", "Settings…", idle},
 	}
 	if v.Update != "" {
@@ -150,8 +148,8 @@ func friendly(flavor string, err error) string {
 		return fmt.Sprintf("Close WoW (%s) first", flavor)
 	case errors.Is(err, engine.ErrAborted):
 		return "Conflict not resolved; nothing changed"
-	case errors.Is(err, local.ErrNoBackup):
-		return "That backup no longer exists"
+	case errors.Is(err, engine.ErrNoRestorePoint):
+		return "That restore point no longer exists"
 	}
 	return err.Error()
 }
