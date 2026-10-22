@@ -7,8 +7,8 @@ import (
 	"github.com/tc-hib/winres"
 )
 
-// The exe carries the app icon at every size Explorer, the taskbar and Alt+Tab ask for, under the
-// ID Wails loads for its window class, so it's also what a window shows before Options.Icon applies.
+// The exe carries the app icon at every size Explorer, the taskbar and Alt+Tab ask for, under both
+// IDs Wails loads it by (3 for windows, IDI_APPLICATION for the window class).
 func TestResourceHasTheAppIconAtEverySize(t *testing.T) {
 	var obj bytes.Buffer
 	if err := Resource(&obj); err != nil {
@@ -21,10 +21,12 @@ func TestResourceHasTheAppIconAtEverySize(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	icon, err := rs.GetIcon(winres.ID(appIconID))
-	if err != nil {
-		t.Fatalf("no icon %d: %v", appIconID, err)
+	for _, id := range []winres.ID{3, 32512} {
+		if _, err := rs.GetIcon(id); err != nil {
+			t.Fatalf("no icon %d: %v", id, err)
+		}
 	}
+	icon, _ := rs.GetIcon(winres.ID(3))
 	var ico bytes.Buffer
 	if err := icon.SaveICO(&ico); err != nil {
 		t.Fatal(err)

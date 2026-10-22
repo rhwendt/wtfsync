@@ -8,11 +8,12 @@ import (
 	"github.com/tc-hib/winres"
 )
 
-// appIconID is IDI_APPLICATION, the icon Wails loads from the exe for its window class. As the
-// exe's only icon it's also the one Explorer, the Start menu shortcut and the taskbar show.
-const appIconID = 32512
+// The IDs Wails loads the exe's icon by: 3 for each window, IDI_APPLICATION for its window class.
+// Explorer and the Start menu shortcut show the lowest.
+var appIconIDs = []winres.ID{3, 32512}
 
-// Resource writes an amd64 COFF object holding App as the exe's icon. Saved as
+// Resource writes an amd64 COFF object holding AppOnDark as the exe's icon. The exe can't switch
+// with the Windows theme; the windows do (see ui.setIcons). Saved as
 // rsrc_windows_amd64.syso beside a main package, go build links it in (see .github/scripts/build.sh).
 func Resource(w io.Writer) error {
 	rs, err := resources()
@@ -23,7 +24,7 @@ func Resource(w io.Writer) error {
 }
 
 func resources() (*winres.ResourceSet, error) {
-	img, err := png.Decode(bytes.NewReader(App))
+	img, err := png.Decode(bytes.NewReader(AppOnDark))
 	if err != nil {
 		return nil, err
 	}
@@ -32,8 +33,10 @@ func resources() (*winres.ResourceSet, error) {
 		return nil, err
 	}
 	rs := &winres.ResourceSet{}
-	if err := rs.SetIcon(winres.ID(appIconID), icon); err != nil {
-		return nil, err
+	for _, id := range appIconIDs {
+		if err := rs.SetIcon(id, icon); err != nil {
+			return nil, err
+		}
 	}
 	return rs, nil
 }

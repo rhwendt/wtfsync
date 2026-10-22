@@ -1,8 +1,0 @@
-<!-- wtfsync app icon (window title bar, taskbar): the tray tile without its state strip, drawn at
-     its 256 px size because the renderer (oksvg) doesn't scale stroke widths. Paths only: oksvg
-     mis-draws <polyline> and needs ry beside rx. -->
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
-  <rect width="256" height="256" rx="48" ry="48" fill="#1e2530"/>
-  <path fill="none" stroke="#fff" stroke-width="28" stroke-linecap="round" stroke-linejoin="round"
-        d="M20 72 L42 184 L64 128 L86 184 L108 72 M124 72 H172 M148 72 V184 M232 72 H196 V184 M196 128 H224"/>
-</svg>
