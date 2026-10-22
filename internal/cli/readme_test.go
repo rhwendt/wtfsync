@@ -36,12 +36,9 @@ func TestReadmeDocumentsEveryCommandAndFlag(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, ref, ok := strings.Cut(string(b), "\n## Command reference\n")
+	ref, ok := commandReference(string(b))
 	if !ok {
 		t.Fatal(`README has no "## Command reference" section`)
-	}
-	if end := strings.Index(ref, "\n## "); end >= 0 {
-		ref = ref[:end]
 	}
 	cmds, flags := usageNames(usage)
 	for _, c := range cmds {
@@ -54,4 +51,26 @@ func TestReadmeDocumentsEveryCommandAndFlag(t *testing.T) {
 			t.Errorf("Command reference doesn't mention %s", f)
 		}
 	}
+}
+
+func TestCommandReferenceFoundWithWindowsLineEndings(t *testing.T) {
+	// Git on Windows checks the README out with CRLF line endings.
+	readme := "# x\r\n\r\n## Command reference\r\n\r\n### `wtfsync push`\r\n\r\n## Build\r\n"
+	ref, ok := commandReference(readme)
+	if !ok || !strings.Contains(ref, "### `wtfsync push`") || strings.Contains(ref, "Build") {
+		t.Fatalf("got %q, %v", ref, ok)
+	}
+}
+
+// commandReference is the README's "## Command reference" section, up to the next "## ".
+func commandReference(readme string) (string, bool) {
+	readme = strings.ReplaceAll(readme, "\r\n", "\n")
+	_, ref, ok := strings.Cut(readme, "\n## Command reference\n")
+	if !ok {
+		return "", false
+	}
+	if end := strings.Index(ref, "\n## "); end >= 0 {
+		ref = ref[:end]
+	}
+	return ref, true
 }
