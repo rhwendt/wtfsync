@@ -21,7 +21,7 @@ func TestStatus(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := Status{Flavor: "retail", Base: s1.String(), Newest: s2.String(), NewestBy: "NJ", Reachable: true, LocalChanges: 2}
+	want := Status{Flavor: "retail", Base: s1.String(), BaseBy: "NJ", Newest: s2.String(), NewestBy: "NJ", Reachable: true, LocalChanges: 2}
 	if !reflect.DeepEqual(st, want) {
 		t.Fatalf("got %+v\nwant %+v", st, want)
 	}

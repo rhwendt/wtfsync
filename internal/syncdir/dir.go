@@ -8,6 +8,8 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/rhwendt/wtfsync/internal/fsutil"
@@ -116,4 +118,28 @@ func (d *Dir) Machine(uuid string) (MachineRecord, error) {
 	var r MachineRecord
 	err := d.readJSON(d.machinePath(uuid), &r)
 	return r, err
+}
+
+// Machines lists every PC that has joined this folder, sorted by name. Files that aren't readable
+// records are skipped.
+func (d *Dir) Machines() ([]MachineRecord, error) {
+	entries, err := os.ReadDir(filepath.Join(d.Root, "machines"))
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var out []MachineRecord
+	for _, e := range entries {
+		uuid, ok := strings.CutSuffix(e.Name(), ".json")
+		if !ok || e.IsDir() {
+			continue
+		}
+		if r, err := d.Machine(uuid); err == nil {
+			out = append(out, r)
+		}
+	}
+	slices.SortFunc(out, func(a, b MachineRecord) int { return strings.Compare(a.Name, b.Name) })
+	return out, nil
 }

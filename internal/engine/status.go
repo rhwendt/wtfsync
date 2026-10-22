@@ -14,6 +14,7 @@ import (
 type Status struct {
 	Flavor       string
 	Base         string // snapshot last synced; "" = never
+	BaseBy       string // display name of the PC that wrote Base; "" when unknown
 	Newest       string // newest snapshot in the sync folder; "" = none (or unreachable)
 	NewestBy     string // display name of the PC that wrote Newest
 	Reachable    bool
@@ -42,6 +43,11 @@ func (e *Engine) Status(f wow.Flavor) (Status, error) {
 	}
 	s.Reachable = true
 	s.MissingAddons = e.missingAddons(f, d)
+	if b, ok := syncdir.ParseName(s.Base); ok {
+		if m, err := d.Machine(b.UUID); err == nil {
+			s.BaseBy = m.Name
+		}
+	}
 	n, ok, err := d.Newest(f.Name)
 	if err != nil || !ok {
 		return s, err
