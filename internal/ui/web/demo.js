@@ -32,7 +32,7 @@ const answers = {
   Defaults: () => ({ Installs: ["C:\\Program Files (x86)\\World of Warcraft"], Clouds: ["G:\\My Drive\\wtfsync"],
     WoWDir: "C:\\Program Files (x86)\\World of Warcraft", Sync: "G:\\My Drive\\wtfsync", Name: "beehive", Rerun: false }),
   CloudPCs: () => ["leviathan"],
-  Conflicts: () => ({ ID: 1, Other: "leviathan", FirstLink: false, Files: [
+  Conflicts: () => ({ ID: 1, Flavor: "classic", Other: "leviathan", FirstLink: false, Files: [
     "Account/WOWPLAYER/SavedVariables/ElvUI.lua",
     "Account/WOWPLAYER/SavedVariables/Details.lua",
     "Account/WOWPLAYER/Area 52/Thrall/SavedVariables/WeakAuras.lua",

@@ -9,6 +9,7 @@ import (
 // ConflictRequest is what the conflict dialog shows.
 type ConflictRequest struct {
 	ID        int      // which question this is; replies and window closes name it
+	Flavor    string   // the flavor being synced ("retail", "classic", …)
 	Other     string   // the other PC's display name
 	FirstLink bool     // this PC has never synced the flavor: offer the one-question choice
 	Files     []string // conflicting paths, relative to WTF/
@@ -27,7 +28,7 @@ type prompter struct {
 	answer  chan map[string]engine.Choice // nil map = cancelled
 }
 
-func (p *prompter) Resolve(conflicts []string, other string, firstLink bool) (map[string]engine.Choice, error) {
+func (p *prompter) Resolve(flavor string, conflicts []string, other string, firstLink bool) (map[string]engine.Choice, error) {
 	ch := make(chan map[string]engine.Choice, 1)
 	p.mu.Lock()
 	if p.closed {
@@ -35,7 +36,7 @@ func (p *prompter) Resolve(conflicts []string, other string, firstLink bool) (ma
 		return nil, engine.ErrAborted
 	}
 	p.last++
-	p.pending = &ConflictRequest{ID: p.last, Other: other, FirstLink: firstLink, Files: conflicts}
+	p.pending = &ConflictRequest{ID: p.last, Flavor: flavor, Other: other, FirstLink: firstLink, Files: conflicts}
 	p.answer = ch
 	p.mu.Unlock()
 	p.open("conflicts")
@@ -99,7 +100,7 @@ func (p *prompter) FirstLink(int, string) (engine.FirstLinkChoice, error) {
 }
 
 func (p *prompter) Conflict(path, other string) (engine.Choice, error) {
-	m, err := p.Resolve([]string{path}, other, false)
+	m, err := p.Resolve("", []string{path}, other, false) // never reached: the engine uses Resolve
 	if err != nil {
 		return 0, err
 	}

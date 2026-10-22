@@ -6,6 +6,7 @@ applyTheme((await call("Main"))?.Appearance || "system");
 const req = await call("Conflicts");
 // Answer before closing: the window's close event cancels this question if it's still open.
 const reply = async (choices, cancel) => { await call("AnswerConflicts", req.ID, choices, cancel); close(); };
+const title = req.Flavor ? `${req.Flavor}: settings changed on both PCs` : "Settings changed on both PCs";
 const all = (c) => Object.fromEntries(req.Files.map((f) => [f, c]));
 const footer = h("p", { class: "muted" }, "Cancel changes nothing. Files you replace are backed up first.");
 
@@ -21,7 +22,7 @@ function perFile() {
     r.seg.querySelectorAll("input").forEach((i, n) => { i.checked = (n === 0) === (v === "remote"); });
   });
   show(
-    h("h1", {}, "Settings changed on both PCs"),
+    h("h1", {}, title),
     h("p", {}, `These files changed on `, h("b", {}, req.Other), ` and on this PC since you last synced. Choose which version to keep.`),
     h("table", {}, rows.map((r) => r.tr)),
     h("div", { class: "row" }, h("span", { class: "muted" }, "Set all to"),
@@ -37,7 +38,7 @@ if (!req.Files || req.Files.length === 0) {
   show(h("p", { class: "muted" }, "Nothing to decide."), h("div", { class: "row end" }, h("button", { onclick: close }, "Close")));
 } else if (req.FirstLink) {
   show(
-    h("h1", {}, "Settings changed on both PCs"),
+    h("h1", {}, title),
     h("p", {}, `This PC and `, h("b", {}, req.Other), ` both have settings for ${req.Files.length} file(s).`),
     h("div", { class: "row end" },
       h("button", { onclick: () => reply(null, true) }, "Cancel"),

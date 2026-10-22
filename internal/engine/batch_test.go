@@ -13,10 +13,11 @@ type batch struct {
 	err      error
 	asked    []string
 	first    bool
+	flavor   string
 }
 
-func (b *batch) Resolve(conflicts []string, _ string, firstLink bool) (map[string]Choice, error) {
-	b.asked, b.first = conflicts, firstLink
+func (b *batch) Resolve(flavor string, conflicts []string, _ string, firstLink bool) (map[string]Choice, error) {
+	b.asked, b.first, b.flavor = conflicts, firstLink, flavor
 	return b.choices, b.err
 }
 
@@ -79,6 +80,9 @@ func TestBatchPrompterToldAboutFirstLink(t *testing.T) {
 	}
 	if !b.first {
 		t.Fatal("firstLink = false on a PC that never synced")
+	}
+	if b.flavor != "retail" {
+		t.Fatalf("flavor = %q, want retail: the dialog must say which flavor it's about", b.flavor)
 	}
 	v.want(pathA, "a-mine")
 }

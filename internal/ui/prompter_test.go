@@ -26,7 +26,7 @@ func TestResolveReturnsTheDialogsChoices(t *testing.T) {
 		seen = req
 		p.reply(req.ID, map[string]string{"a.lua": "remote", "b.lua": "local", "c.lua": "bogus"}, false)
 	})
-	got, err := p.Resolve([]string{"a.lua", "b.lua"}, "NJ", true)
+	got, err := p.Resolve("retail", []string{"a.lua", "b.lua"}, "NJ", true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -34,7 +34,7 @@ func TestResolveReturnsTheDialogsChoices(t *testing.T) {
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %v", got)
 	}
-	if seen.Other != "NJ" || !seen.FirstLink || len(seen.Files) != 2 {
+	if seen.Flavor != "retail" || seen.Other != "NJ" || !seen.FirstLink || len(seen.Files) != 2 {
 		t.Fatalf("request %+v", seen)
 	}
 	if p.request().Files != nil {
@@ -44,7 +44,7 @@ func TestResolveReturnsTheDialogsChoices(t *testing.T) {
 
 func TestCancelOrCloseAborts(t *testing.T) {
 	p := dialog(t, func(p *prompter, req ConflictRequest) { p.reply(req.ID, nil, true) })
-	if _, err := p.Resolve([]string{"a.lua"}, "NJ", false); !errors.Is(err, engine.ErrAborted) {
+	if _, err := p.Resolve("retail", []string{"a.lua"}, "NJ", false); !errors.Is(err, engine.ErrAborted) {
 		t.Fatalf("err = %v", err)
 	}
 }
@@ -54,7 +54,7 @@ func TestSecondReplyIsIgnored(t *testing.T) {
 		p.reply(req.ID, map[string]string{"a.lua": "local"}, false)
 		p.reply(req.ID, nil, true) // e.g. the window closing right after Apply
 	})
-	got, err := p.Resolve([]string{"a.lua"}, "NJ", false)
+	got, err := p.Resolve("retail", []string{"a.lua"}, "NJ", false)
 	if err != nil || got["a.lua"] != engine.ChooseLocal {
 		t.Fatalf("got %v, %v", got, err)
 	}
@@ -88,10 +88,10 @@ func TestStaleCloseDoesNotCancelTheNextQuestion(t *testing.T) {
 			p.reply(req.ID, map[string]string{"b.lua": "remote"}, false)
 		}()
 	}
-	if got, err := p.Resolve([]string{"a.lua"}, "NJ", false); err != nil || got["a.lua"] != engine.ChooseLocal {
+	if got, err := p.Resolve("retail", []string{"a.lua"}, "NJ", false); err != nil || got["a.lua"] != engine.ChooseLocal {
 		t.Fatalf("first: %v, %v", got, err)
 	}
-	got, err := p.Resolve([]string{"b.lua"}, "NJ", false)
+	got, err := p.Resolve("retail", []string{"b.lua"}, "NJ", false)
 	if err != nil || got["b.lua"] != engine.ChooseRemote {
 		t.Fatalf("second: got %v, %v; want b.lua kept from NJ", got, err)
 	}
@@ -103,13 +103,13 @@ func TestShutdownCancelsNowAndLater(t *testing.T) {
 	opened := make(chan struct{}, 2)
 	p.open = func(string) { opened <- struct{}{} }
 	errs := make(chan error)
-	go func() { _, err := p.Resolve([]string{"a.lua"}, "NJ", false); errs <- err }()
+	go func() { _, err := p.Resolve("retail", []string{"a.lua"}, "NJ", false); errs <- err }()
 	<-opened
 	p.shutdown()
 	if err := <-errs; !errors.Is(err, engine.ErrAborted) {
 		t.Fatalf("open question: err = %v", err)
 	}
-	if _, err := p.Resolve([]string{"b.lua"}, "NJ", false); !errors.Is(err, engine.ErrAborted) {
+	if _, err := p.Resolve("retail", []string{"b.lua"}, "NJ", false); !errors.Is(err, engine.ErrAborted) {
 		t.Fatalf("later question: err = %v", err)
 	}
 	if len(opened) != 0 {
