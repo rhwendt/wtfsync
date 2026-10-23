@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.11.1](https://github.com/rhwendt/wtfsync/compare/v0.11.0...v0.11.1) (2026-10-23)
+
+
+### Bug Fixes
+
+* don't show the update toast on Settings, which already offers the update ([58a5bad](https://github.com/rhwendt/wtfsync/commit/58a5badd2568ed17411ecc5767f8501bbad1c935))
+* don't show the update toast on Settings, which already offers the update ([2410772](https://github.com/rhwendt/wtfsync/commit/2410772020fcf28d17e124dc8d57253e5d1f7281))
+
 ## [0.11.0](https://github.com/rhwendt/wtfsync/compare/v0.10.2...v0.11.0) (2026-10-22)
 
 
