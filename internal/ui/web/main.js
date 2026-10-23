@@ -130,11 +130,15 @@ function points(f, busy) {
   const choosable = f.Points.filter((p) => !p.Current);
   if (!choosable.some((p) => p.Name === picked[f.Name])) picked[f.Name] = choosable.length ? choosable[0].Name : "";
   return h("div", {},
-    h("div", { class: "points" }, f.Points.map((p) =>
-      h("label", { class: "point" + (p.Current ? " current" : "") + (p.Name === picked[f.Name] ? " on" : "") },
-        h("input", { type: "radio", name: "point", disabled: p.Current, checked: p.Name === picked[f.Name], onchange: () => { picked[f.Name] = p.Name; render(); } }),
+    h("div", { class: "points" }, f.Points.map((p) => p.Current
+      // The point the files match: a plain row, not a choice.
+      ? h("div", { class: "point current" },
+        h("span", { class: "check" }, "✓"),
         h("span", { class: "grow" }, p.When, " · from ", p.From),
-        p.Current ? h("span", { class: "tag" }, "current") : ""))),
+        h("span", { class: "tag" }, "your files match this"))
+      : h("label", { class: "point" + (p.Name === picked[f.Name] ? " on" : "") },
+        h("input", { type: "radio", name: "point", checked: p.Name === picked[f.Name], onchange: () => { picked[f.Name] = p.Name; render(); } }),
+        h("span", { class: "grow" }, p.When, " · from ", p.From)))),
     h("div", { class: "row" },
       h("span", { class: "muted grow" }, "Puts this flavor's settings back as they were then. What's there now is saved first."),
       h("button", { disabled: busy || !picked[f.Name], onclick: () => { confirming = { flavor: f.Name, name: picked[f.Name] }; render(); } }, "Restore…")));
