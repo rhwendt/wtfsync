@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.2](https://github.com/rhwendt/wtfsync/compare/v0.11.1...v0.11.2) (2026-10-23)
+
+
+### Bug Fixes
+
+* show the current restore point as a plain row, not a disabled choice ([#25](https://github.com/rhwendt/wtfsync/issues/25)) ([04c20e0](https://github.com/rhwendt/wtfsync/commit/04c20e0af8a78649bae6697bb7eb1ea978bd5389))
+
 ## [0.11.1](https://github.com/rhwendt/wtfsync/compare/v0.11.0...v0.11.1) (2026-10-23)
 
 
