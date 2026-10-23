@@ -7,10 +7,10 @@ name: release
 # publishes its notes (the same changelog entry), builds the exes with that version and attaches
 # them.
 #
-# This needs the RELEASE_PLEASE_TOKEN secret: a fine-grained PAT for this repo with Contents and
-# Pull requests read/write. Events caused by the default GITHUB_TOKEN don't trigger workflows, so
-# without the PAT, CI wouldn't run on the release PR (main requires it) and its merge wouldn't
-# start the release run.
+# It acts as the rhwendt-release-bot GitHub App (Contents and Pull requests read/write), from the
+# RELEASE_APP_CLIENT_ID variable and the RELEASE_APP_KEY secret. Events caused by the default
+# GITHUB_TOKEN don't trigger workflows, so with that token CI wouldn't run on the release PR (main
+# requires it) and its merge wouldn't start the release run.
 on:
   push:
     branches: [main]
@@ -30,24 +30,26 @@ jobs:
       created: ${{ steps.release.outputs.release_created }}
       tag: ${{ steps.release.outputs.tag_name }}
     steps:
+      - id: app
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_KEY }}
+
       - id: release
         uses: googleapis/release-please-action@v5
         with:
-          token: ${{ secrets.RELEASE_PLEASE_TOKEN || github.token }}
+          token: ${{ steps.app.outputs.token }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
 
       - name: Auto-merge the release PR once CI passes
         if: ${{ steps.release.outputs.pr != '' }}
         env:
-          GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          GH_TOKEN: ${{ steps.app.outputs.token }}
           PR_JSON: ${{ steps.release.outputs.pr }}  # parsed below: fromJSON fails on an empty output
         run: |
           PR_NUMBER=$(jq -r '.number' <<<"$PR_JSON")
-          if [ -z "$GH_TOKEN" ]; then
-            echo "::notice::RELEASE_PLEASE_TOKEN isn't set: CI won't run on release PR #$PR_NUMBER. Close and reopen it to start CI, then merge it."
-            exit 0
-          fi
           gh pr merge "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --auto --merge
 
   # The release exists now (notes from the changelog); build the installer, the CLI and their
