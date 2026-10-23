@@ -75,13 +75,14 @@ function update() {
   setTimeout(load, 1500);
 }
 
-// drawToast offers an update in the corner while one is waiting, unless Later was clicked for it.
+// drawToast offers an update in the corner while one is waiting, unless Later was clicked for it
+// or Settings is open (its About row offers it already). While installing it shows on every page.
 // The window and tray restart once it's installed.
 function drawToast() {
   const v = data.Update;
   const t = $("#toast");
   const busy = installing || data.Busy === "updating";
-  t.hidden = !v || view === "wizard" || (later() === v && !busy);
+  t.hidden = !v || view === "wizard" || ((later() === v || view === "settings") && !busy);
   if (t.hidden) return;
   t.replaceChildren(
     h("b", {}, "Update available"),
