@@ -19,28 +19,8 @@ jobs:
       - run: go vet ./...
       - run: go test ./...
 
-  # The version is known before building so it's built into both programs: the next release's
-  # tag on pushes to main (empty when nothing warrants a release), otherwise "dev".
-  version:
-    runs-on: ubuntu-latest
-    outputs:
-      tag: ${{ steps.next.outputs.tag }}
-      build: ${{ steps.next.outputs.build }}
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-      - id: next
-        run: |
-          tag=""
-          if [ "${{ github.event_name }}" = push ] && [ "${{ github.ref }}" = refs/heads/main ]; then
-            tag=$(.github/scripts/next-version.sh)
-          fi
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
-          echo "build=${tag:-dev}" >> "$GITHUB_OUTPUT"
-
+  # Releases are built by release.yml with their version; this build is "dev".
   build:
-    needs: version
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -48,7 +28,7 @@ jobs:
         with:
           go-version-file: go.mod
       - run: sudo apt-get update -qq && sudo apt-get install -y -qq nsis
-      - run: .github/scripts/build.sh "${{ needs.version.outputs.build }}"
+      - run: .github/scripts/build.sh dev
       - uses: actions/upload-artifact@v7
         with:
           name: wtfsync-windows-amd64
@@ -75,29 +55,3 @@ jobs:
         with:
           name: screenshots
           path: dist/screenshots
-
-  # Every merge to main whose commits include a feat, fix, perf or breaking change publishes a
-  # GitHub Release with the installer, the CLI and their checksums, versioned from the
-  # Conventional Commits since the last tag.
-  release:
-    needs: [version, test, build]
-    if: needs.version.outputs.tag != ''
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    concurrency: release
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-      - uses: actions/download-artifact@v8
-        with:
-          name: wtfsync-windows-amd64
-          path: dist
-      - env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ needs.version.outputs.tag }}
-        run: |
-          .github/scripts/release-notes.py "$TAG" > notes.md
-          gh release create "$TAG" dist/wtfsync-setup.exe dist/wtfsync.exe dist/checksums.txt \
-            --target "$GITHUB_SHA" --title "$TAG" --notes-file notes.md

@@ -1,0 +1,74 @@
+name: release
+
+# On every push to main, release-please keeps a release PR up to date: it reads the Conventional
+# Commits since the last tag, picks the next version (feat bumps the minor, fix/perf the patch, a
+# breaking change the minor while still 0.x) and writes the CHANGELOG.md entry. The release PR is
+# set to auto-merge once CI passes; that merge pushes to main, and the next run tags the release,
+# publishes its notes (the same changelog entry), builds the exes with that version and attaches
+# them.
+#
+# It acts as the rhwendt-release-bot GitHub App (Contents and Pull requests read/write), from the
+# RELEASE_APP_CLIENT_ID variable and the RELEASE_APP_KEY secret. Events caused by the default
+# GITHUB_TOKEN don't trigger workflows, so with that token CI wouldn't run on the release PR (main
+# requires it) and its merge wouldn't start the release run.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency: release
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      created: ${{ steps.release.outputs.release_created }}
+      tag: ${{ steps.release.outputs.tag_name }}
+    steps:
+      - id: app
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_KEY }}
+
+      - id: release
+        uses: googleapis/release-please-action@v5
+        with:
+          token: ${{ steps.app.outputs.token }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+      - name: Auto-merge the release PR once CI passes
+        if: ${{ steps.release.outputs.pr != '' }}
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          PR_JSON: ${{ steps.release.outputs.pr }}  # parsed below: fromJSON fails on an empty output
+        run: |
+          PR_NUMBER=$(jq -r '.number' <<<"$PR_JSON")
+          gh pr merge "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --auto --merge
+
+  # The release exists now (notes from the changelog); build the installer, the CLI and their
+  # checksums with its version and attach them.
+  assets:
+    needs: release-please
+    if: needs.release-please.outputs.created == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.release-please.outputs.tag }}
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq nsis
+      - run: .github/scripts/build.sh "${{ needs.release-please.outputs.tag }}"
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "${{ needs.release-please.outputs.tag }}" \
+            dist/wtfsync-setup.exe dist/wtfsync.exe dist/checksums.txt --clobber
