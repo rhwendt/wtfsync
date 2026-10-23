@@ -50,7 +50,7 @@ jobs:
           PR_JSON: ${{ steps.release.outputs.pr }}  # parsed below: fromJSON fails on an empty output
         run: |
           PR_NUMBER=$(jq -r '.number' <<<"$PR_JSON")
-          gh pr merge "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --auto --merge
+          gh pr merge "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --auto --squash
 
   # The release exists now (notes from the changelog); build the installer, the CLI and their
   # checksums with its version and attach them.
