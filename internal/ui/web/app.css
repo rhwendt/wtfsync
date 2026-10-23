@@ -74,8 +74,9 @@ body.wizard-mode .list, body.wizard-mode .top button { display: none; }
 .points { display: grid; gap: 4px; max-height: 220px; overflow-y: auto; padding-right: 2px; }
 .point { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 6px; cursor: pointer; }
 .point.on { border-color: var(--accent); background: var(--sel); }
-.point.current { cursor: default; }
-.point .tag { font-size: 11px; font-weight: 600; color: var(--muted); border: 1px solid var(--line); border-radius: 10px; padding: 0 7px; }
+.point.current { cursor: default; border-color: transparent; background: color-mix(in srgb, var(--ok) 12%, transparent); }
+.point .check { width: 13px; margin: 0 3px 0 5px; text-align: center; color: var(--ok); font-weight: 700; }
+.point .tag { font-size: 12px; font-weight: 600; color: var(--ok); }
 .confirm { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
 
 /* Settings */
